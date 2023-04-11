@@ -4,6 +4,20 @@ import 'dart:html' as html;
 import 'package:js/js_util.dart';
 import 'dart:typed_data';
 
+import 'package:ic_tools/ic_tools.dart';
+import 'package:ic_tools/candid.dart' show c_forwards, c_backwards, Record;
+import 'package:ic_tools/candid.dart' as candid;
+import 'package:ic_tools_web/ic_tools_web.dart';
+import 'package:loading_animation_widget/loading_animation_widget.dart';
+
+import './state.dart';
+
+
+
+
+//final Canister server = Canister(Principal(''));
+
+
 void main() {
   runApp(const MyApp());
 }
@@ -14,29 +28,57 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'File Server',
+      title: 'File Server Canister',
       theme: ThemeData(
         primarySwatch: Colors.red,
+        appBarTheme: AppBarTheme(
+            //color: blue, 
+            backgroundColor: Colors.red, 
+            //foregroundColor: double?, 
+            elevation: 0.0,  
+            shadowColor: null,  
+        )
       ),
       home: const MyHomePage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key});
+final List<String> tabs = [
+    'SYNC FILES',
+    'BROWSE FILES'
+];
 
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
+
+class MyHomePage extends StatefulWidget {
+    const MyHomePage({super.key});
+
+    @override
+    State<MyHomePage> createState() => _MyHomePageState();  
 }
 
-class _MyHomePageState extends State<MyHomePage> {
+class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateMixin {
     late html.Element input_directory;  
-  
+    //final String temp_canister_server_dir = DateTime.now().millisecondsSinceEpoch.toString;
+    CustomState state = CustomState();
+    bool load_first_state_future_is_complete = false;
+    
+    late TabController tab_controller;
+    
     @override
     void initState() {
         super.initState();
-    
+        
+        tab_controller = TabController(vsync: this, length: tabs.length);
+        
+        this.state.load_first_state().then((_null) { 
+            this.setState((){
+                load_first_state_future_is_complete = true;
+            });
+        }, onError: (e,s) {
+            print(e);
+        });
+        
         input_directory = html.Element.html(
             '<input type="file" id="directorypicker" name="fileList" webkitdirectory />',
             validator: html.NodeValidatorBuilder()
@@ -71,36 +113,63 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('File Server Canister'),
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            /*
-            Container(
-                width: 70,
-                height: 50,
-                child: HtmlElementView(
-                    viewType: 'input_directory_view_type',
+    @override
+    Widget build(BuildContext context) {
+        return Scaffold(
+            appBar: AppBar(
+                title: Text('File Server Canister'),
+                bottom: TabBar(
+                    controller: tab_controller,
+                    tabs: tabs.map((s)=>Tab(text: s)).toList()
                 ),
             ),
-            */
-            ElevatedButton(
-                child: Text('Upload Folder'),
-                onPressed: () {
-                    input_directory.click();
-                }
-            )      
-          ],
-        ),
-      ),
-    );
-  }
+            body: this.load_first_state_future_is_complete == false || this.state.loading ? Center(
+                child: LoadingAnimationWidget.threeArchedCircle( // fade this in and out
+                    color: Colors.black,
+                    size: 200,
+                ),
+            ) : this.state.user == null ? Center(
+                child: OutlinedButton(
+                    child: Text('LOGIN'),
+                    onPressed: () {
+                        setState((){
+                            state.loading = true;
+                            User.login().then((User user) {
+                                setState((){
+                                    state.user = user;
+                                    state.loading = false;
+                                });
+                            }, onError: (authorize_client_error) {
+                                print(authorize_client_error);   
+                            });
+                        });
+                    }
+                )
+            ) : /*this.state.user != null ? */ Center(
+                child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: <Widget>[
+                        Text('welcome user: ${state.user!.principal.text}'),
+                        /*
+                        Container(
+                            width: 70,
+                            height: 50,
+                            child: HtmlElementView(
+                                viewType: 'input_directory_view_type',
+                            ),
+                        ),
+                        */
+                        ElevatedButton(
+                            child: Text('Upload Folder'),
+                            onPressed: () {
+                                input_directory.click();
+                            }
+                        )      
+                    ],
+                ),
+            ),     
+        ); 
+    }
 }
 
 
@@ -145,4 +214,13 @@ class FileUpload {
             return this.webkitRelativePath.substring(this.webkitRelativePath.indexOf('/'));
         }
     }
+}
+
+
+Future<void> canister_upload_files(List<FileUpload> file_uploads) async {
+    
+    // :LOOK AT THE go.dart-put_frontcode_files-FUNCTION.
+
+    //await Future.wait();
+
 }
