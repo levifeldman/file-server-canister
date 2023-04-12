@@ -77,6 +77,8 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
             });
         }, onError: (e,s) {
             print(e);
+            // alert dialog 
+            
         });
         
         input_directory = html.Element.html(
@@ -126,7 +128,7 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
             body: this.load_first_state_future_is_complete == false || this.state.loading ? Center(
                 child: LoadingAnimationWidget.threeArchedCircle( // fade this in and out
                     color: Colors.black,
-                    size: 200,
+                    size: 100,
                 ),
             ) : this.state.user == null ? Center(
                 child: OutlinedButton(
@@ -135,6 +137,11 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
                         setState((){
                             state.loading = true;
                             User.login().then((User user) {
+                                user.save_into_indexdb().then((_null){
+                                    print('user is save in the indexdb');
+                                }, onError: (e) {
+                                    print('error saving user in the indexdb: $e');
+                                });
                                 setState((){
                                     state.user = user;
                                     state.loading = false;
