@@ -1,4 +1,4 @@
-use serde::Serialize;
+
 use serde_bytes::ByteBuf;
 
 use ic_cdk::export::{

@@ -51,7 +51,7 @@ use types::*;
 
 use localkey::{
     refcell::{with,with_mut},
-    cell::{set,get}
+    //cell::{set,get}
 };
 
 

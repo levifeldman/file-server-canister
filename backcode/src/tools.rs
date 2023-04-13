@@ -1,7 +1,7 @@
-use std::collections::HashMap;
+
 use ic_cdk::{
     export::{
-        candid::{CandidType, Deserialize, Func, Nat},
+        candid::{Nat},
         Principal,
     },
     trap,
@@ -68,8 +68,8 @@ pub mod localkey {
     }
 }
 use localkey::{
-    refcell::{with,with_mut},
-    cell::{set,get}
+    refcell::{with},
+    //cell::{set,get}
 };
 
 

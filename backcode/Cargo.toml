@@ -2,7 +2,7 @@
 name = "file_server_canister"
 version = "0.1.0"
 edition = "2021"
-author = "Levi Feldman <levifeldman37@gmail.com>"
+authors = ["Levi Feldman <levifeldman37@gmail.com>"]
 
 
 
