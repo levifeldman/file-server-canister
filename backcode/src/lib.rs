@@ -2,15 +2,56 @@
 mod tests;
 
 use std::collections::HashSet;
+use std::cell::RefCell;
+
 use ic_cdk::{
     self, 
-    api::{
-        call,
-    }
-};
-use ic_cdk_macros::{
+    init,
+    pre_upgrade,
+    post_upgrade,
     update,
     query,
+    trap,
+    caller,
+    export::{
+        Principal,
+        candid::{
+            CandidType,
+            Deserialize,
+            encode_one,
+            decode_one,
+            Func
+        },
+    },
+    api::{
+        call::{
+            reply
+        },
+        stable::{
+            WASM_PAGE_SIZE_IN_BYTES as WASM_PAGE_SIZE_BYTES,
+            stable64_grow,
+            stable64_read,
+            stable64_write,
+            stable64_size,
+        },
+    }
+};
+
+use serde_bytes::ByteBuf;
+use sha2::Digest;
+use num_traits::cast::ToPrimitive;
+
+
+
+pub mod tools;
+use tools::*;
+
+pub mod types;
+use types::*;
+
+use localkey::{
+    refcell::{with,with_mut},
+    cell::{set,get}
 };
 
 
@@ -20,16 +61,19 @@ use ic_cdk_macros::{
 const STABLE_MEMORY_HEADER_SIZE_BYTES: u64 = 1024;
 
 
-
+#[derive(CandidType, Deserialize)]
 pub struct Data {
     controllers: HashSet<Principal>,
     files: Files,
     files_hashes: Vec<(String, [u8; 32])>, // field is only use for the upgrades.
 }
 impl Data {
-    fn new() -> Self {   
-        files: Files::new(),
-        files_hashes: Vec::new(), // field is only use for the upgrades.
+    fn new() -> Self {
+        Self {
+            controllers: HashSet::new(),
+            files: Files::new(),
+            files_hashes: Vec::new(), // field is only use for the upgrades.
+        }
     }
 }
 
@@ -37,7 +81,7 @@ impl Data {
 
 
 thread_local! {
-    pub static DATA: RefCell<CTSData> = RefCell::new(Data::new());
+    pub static DATA: RefCell<Data> = RefCell::new(Data::new());
     
     // not save through upgrades
     pub static FILES_HASHES: RefCell<FilesHashes> = RefCell::new(FilesHashes::new()); // save through the upgrades by the files_hashes field on the Data struct
@@ -143,7 +187,7 @@ fn load_state_snapshot_data() {
 // ------------------------------------
 
 fn user_filepath_start(user: &Principal) -> String {
-    "/" + (user.to_text())
+    "/".to_owned() + &(user.to_text())
 }
 
 
@@ -170,7 +214,7 @@ pub fn user_upload_file(q: UploadFile) {
     }
     
     upload_file(UploadFile{
-        path: user_filepath_start(&caller()) + q.path,
+        path: user_filepath_start(&caller()) + &(q.path),
         ..q
     });
 }
@@ -229,17 +273,17 @@ pub fn user_upload_file_chunks(q: UploadFileChunk) -> () {
     }
     
     upload_file_chunks(UploadFileChunk{
-        path: user_filepath_start(&caller()) + q.path,
+        path: user_filepath_start(&caller()) + &(q.path),
         ..q
     });
 }
 
 
 fn upload_file_chunks(q: UploadFileChunk) {
-    with_mut(&DATA, |DATA| {
-        match DATA.files.get_mut(&path) {
+    with_mut(&DATA, |data| {
+        match data.files.get_mut(&q.path) {
             Some(file) => {
-                file.content_chunks[chunk_i.try_into().unwrap()] = chunk;
+                file.content_chunks[<u32 as TryInto<usize>>::try_into(q.chunk_i).unwrap()] = q.chunk;
                 
                 let mut is_upload_complete: bool = true;
                 for c in file.content_chunks.iter() {
@@ -251,7 +295,7 @@ fn upload_file_chunks(q: UploadFileChunk) {
                 if is_upload_complete == true {
                     with_mut(&FILES_HASHES, |fhs| {
                         fhs.insert(
-                            path.clone(), 
+                            q.path.clone(), 
                             {
                                 let mut hasher: sha2::Sha256 = sha2::Sha256::new();
                                 for chunk in file.content_chunks.iter() {
@@ -277,8 +321,8 @@ fn upload_file_chunks(q: UploadFileChunk) {
 pub fn controller_clear_files() {
     caller_controller_check(&caller());
     
-    with_mut(&DATA, |DATA| {
-        DATA.files = Files::new();
+    with_mut(&DATA, |data| {
+        data.files = Files::new();
     });
 
     with_mut(&FILES_HASHES, |fhs| {
@@ -291,8 +335,8 @@ pub fn controller_clear_files() {
 pub fn controller_clear_file(path: String) {
     caller_controller_check(&caller());
     
-    with_mut(&DATA, |DATA| {
-        DATA.files.remove(&path);
+    with_mut(&DATA, |data| {
+        data.files.remove(&path);
     });
 
     with_mut(&FILES_HASHES, |fhs| {
@@ -320,7 +364,7 @@ pub fn controller_get_file_hashes() -> Vec<(String, [u8; 32])> {
 #[query(manual_reply = true)]
 pub fn see_user_temporary_server_filepaths() {
     with(&DATA, |data| {
-        reply::<(Vec<&str>,)>((data.files.keys().filter(|key: &&str| { key.starts_with(user_filepath_start(&caller())) }).collect<Vec<&str>>(),)); 
+        reply::<(Vec<&String>,)>((data.files.keys().filter(|key| { key.starts_with(&user_filepath_start(&caller())) }).collect::<Vec<&String>>(),)); 
     });
 }
 
@@ -328,16 +372,16 @@ pub fn see_user_temporary_server_filepaths() {
 pub fn delete_user_temporary_server_files() {
     
     with_mut(&DATA, |data| {
-        let user_filepaths: Vec<&str> = data.files.keys().filter(|key: &&str| { key.starts_with(user_filepath_start(&caller())) }).collect<Vec<&str>>();
-        for path in user_filepaths.iter() {
-            data.files.remove(path);
-        }
+        let user_filepaths: Vec<&String> = data.files.keys().filter(|key| { key.starts_with(&user_filepath_start(&caller())) }).collect::<Vec<&String>>();
         with_mut(&FILES_HASHES, |fhs| {
             for path in user_filepaths.into_iter() {
                 fhs.delete(path.as_bytes());
             }
             set_root_hash(fhs);
         });
+        data.files.retain(|key, _v| {
+            key.starts_with(&user_filepath_start(&caller())) == false
+        });        
     });
     
 }
@@ -355,8 +399,8 @@ pub fn http_request(quest: HttpRequest) {
     
     let path: &str = quest.url.split("?").next().unwrap();
     
-    with(&DATA, |DATA| {
-        match DATA.files.get(path) {
+    with(&DATA, |data| {
+        match data.files.get(path) {
             None => {
                 reply::<(HttpResponse,)>(
                     (HttpResponse {
@@ -370,7 +414,7 @@ pub fn http_request(quest: HttpRequest) {
             Some(file) => {
                 let (file_certificate_header_key, file_certificate_header_value): (String, String) = make_file_certificate_header(path); 
                 let mut headers: Vec<(&str, &str)> = vec![(&file_certificate_header_key, &file_certificate_header_value),];
-                headers.extend(file.headers.iter().map(|tuple: &(String, String)| { (&tuple.0, &tuple.1) }));
+                headers.extend(file.headers.iter().map(|tuple: &(String, String)| { (&*tuple.0, &*tuple.1) }));
                 reply::<(HttpResponse,)>(
                     (HttpResponse {
                         status_code: 200,
@@ -399,8 +443,8 @@ pub fn http_request(quest: HttpRequest) {
 
 #[query(manual_reply = true)]
 fn http_request_stream_callback(token: StreamCallbackTokenBackwards) {    
-    with(&DATA, |DATA| {
-        match DATA.files.get(&token.key) {
+    with(&DATA, |data| {
+        match data.files.get(&token.key) {
             None => {
                 trap("the file is not found");        
             }, 

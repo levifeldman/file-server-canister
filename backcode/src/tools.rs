@@ -1,10 +1,23 @@
 use std::collections::HashMap;
 use ic_cdk::{
-    export::candid::{CandidType, Deserialize, Func, Nat},
+    export::{
+        candid::{CandidType, Deserialize, Func, Nat},
+        Principal,
+    },
+    trap,
     api::{data_certificate, set_certified_data}
 };
 use ic_certified_map::{self, HashTree, AsHashTree};
 
+use crate::{
+    FILES_HASHES, 
+    DATA,
+    types::*
+};
+
+use sha2::Digest;
+
+use serde::Serialize;
 
 
 
@@ -54,7 +67,10 @@ pub mod localkey {
         }
     }
 }
-
+use localkey::{
+    refcell::{with,with_mut},
+    cell::{set,get}
+};
 
 
 
@@ -80,8 +96,6 @@ pub fn caller_controller_check(caller: &Principal) {
 
 
 
-use crate::FRONTCODE_FILES_HASHES;
-
 const LABEL_ASSETS: &[u8; 11] = b"http_assets";
 
 
@@ -96,8 +110,8 @@ pub fn set_root_hash(tree: &FilesHashes) {
 
 pub fn make_file_certificate_header(path: &str) -> (String, String) {
     let certificate: Vec<u8> = data_certificate().unwrap_or(vec![]);
-    with(&FRONTCODE_FILES_HASHES, |ffhs| {
-        let witness: HashTree = ffhs.witness(path.as_bytes());
+    with(&FILES_HASHES, |fhs| {
+        let witness: HashTree = fhs.witness(path.as_bytes());
         let tree: HashTree = ic_certified_map::labeled(LABEL_ASSETS, witness);
         let mut serializer = serde_cbor::ser::Serializer::new(vec![]);
         serializer.self_describe().unwrap();

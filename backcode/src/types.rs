@@ -2,9 +2,14 @@ use serde::Serialize;
 use serde_bytes::ByteBuf;
 
 use ic_cdk::export::{
-    candid::{CandidType, Deserialize}
+    candid::{CandidType, Deserialize, Func, Nat}
 };
 use ic_certified_map::RbTree;
+
+use std::collections::HashMap;
+
+
+
 
 
 
