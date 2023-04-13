@@ -7,11 +7,11 @@ import 'dart:typed_data';
 import 'package:ic_tools/ic_tools.dart';
 import 'package:ic_tools/candid.dart' show c_forwards, c_backwards, Record;
 import 'package:ic_tools/candid.dart' as candid;
-import 'package:ic_tools_web/ic_tools_web.dart';
+import 'package:ic_tools_web/ic_tools_web.dart' as ic_tools_web;
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 
 import './state.dart';
-
+import './upload_folder.dart';
 
 
 
@@ -65,6 +65,8 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
     
     late TabController tab_controller;
     
+    ChooseServer choose_server_selection = ChooseServer.temporary;
+    
     @override
     void initState() {
         super.initState();
@@ -72,12 +74,15 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
         tab_controller = TabController(vsync: this, length: tabs.length);
         
         this.state.load_first_state().then((_null) { 
-            this.setState((){
+            setState((){
                 load_first_state_future_is_complete = true;
             });
         }, onError: (e,s) {
             print(e);
-            // alert dialog 
+            // alert dialog
+            setState((){
+                load_first_state_future_is_complete = true;
+            });
             
         });
         
@@ -93,10 +98,35 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
         input_directory.addEventListener(
             "change",
             (html.Event event) async {
-                List<FileUpload> file_uploads = await Future.wait(getProperty(getProperty(event, 'target'), 'files').map<Future<FileUpload>>(FileUpload.ofAJsFile)); 
-                print(file_uploads.map((fu)=>[fu.canister_upload_path(), fu.bytes.length]).toList());
-                
-                
+                setState((){
+                    state.loading = true;
+                });
+                try {
+                    List<FileUpload> file_uploads = getProperty(getProperty(event, 'target'), 'files').map(FileUpload.ofAJsFile).toList(); 
+                    print(file_uploads.map((fu)=>[fu.canister_upload_path(), fu.bytes.length, fu.type]).toList());
+                    
+                    if (choose_server_selection == ChooseServer.temporary) {
+                        await state.user!.delete_user_temporary_server_files();
+                        await upload_files(
+                            files: file_uploads, 
+                            file_server_canister: CustomState.main_canister, 
+                            caller: state.user!.caller, 
+                            legations: state.user!.legations
+                        )    
+                    }
+                    
+                    
+                    
+                    
+                 
+                 
+                    
+                } catch(e,s) {
+                    print('Error syncing files: $e');
+                }
+                setState((){
+                    state.loading = false;
+                });
                 /*
                 for (Object file in getProperty(getProperty(event, 'target'), 'files')) {
                     String webkitRelativePath = getProperty(file, 'webkitRelativePath');
@@ -136,15 +166,19 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
                     onPressed: () {
                         setState((){
                             state.loading = true;
-                            User.login().then((User user) {
+                            ic_tools_web.User.login().then((ic_tools_web.User user) {
                                 user.save_into_indexdb().then((_null){
                                     print('user is save in the indexdb');
                                 }, onError: (e) {
                                     print('error saving user in the indexdb: $e');
                                 });
-                                setState((){
-                                    state.user = user;
-                                    state.loading = false;
+                                state.user = User.of_an_ic_tools_web_user(user);
+                                state.load_first_state().then((_void){
+                                    setState((){
+                                        state.loading = false;
+                                    });  
+                                }, onError: (e) {
+                                    print(e);
                                 });
                             }, onError: (authorize_client_error) {
                                 print(authorize_client_error);   
@@ -157,6 +191,27 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: <Widget>[
                         Text('welcome user: ${state.user!.principal.text}'),
+                        Container(
+                            width: 50,
+                            child: DropdownButton(
+                                items: [
+                                    DropdownMenuItem(child: Text('Free Server'), value: ChooseServer.temporary),
+                                    if (state.user!.user_server == null) DropdownMenuItem(child: Text('Create A Server'), value: ChooseServer.create_user_server),
+                                    if (state.user!.user_server != null) DropdownMenuItem(child: Text('User Server'), value: ChooseServer.user_server),
+                                ],
+                                value: choose_server_selection,
+                                onChanged: (ChooseServer? selection) {
+                                    if (selection is ChooseServer) {
+                                        setState((){
+                                            choose_server_selection = selection;
+                                        });
+                                    }
+                                },
+                                elevation: 0,
+                                isExpanded: true
+                            ),
+                        )
+                        
                         /*
                         Container(
                             width: 70,
@@ -192,35 +247,30 @@ class ItemUrlPolicy implements html.UriPolicy {
 
 class FileUpload {
     final String name;
-    final String webkitRelativePath;
-    final int size;
-    final String type; // mime-type
-    final Uint8List bytes;
+    final String path;
+    //final int size;
+    final String content_type; // mime-type
+    Future<Uint8List> bytes;
     FileUpload._({
         required this.name,
-        required this.webkitRelativePath,
-        required this.size,
-        required this.type, // mime-type
+        required this.path,
+        //required this.size,
+        required this.content_type, // mime-type
         required this.bytes,
     });
     
-    static Future<FileUpload> ofAJsFile(Object file) async {        
+    static FileUpload ofAJsFile(Object file) {        
+        String name = getProperty(file, 'name');
+        String webkitRelativePath = getProperty(file, 'webkitRelativePath');
         return FileUpload._(
-            name: getProperty(file, 'name'),
-            webkitRelativePath: getProperty(file, 'webkitRelativePath'),
-            size: getProperty(file, 'size'),
-            type: getProperty(file, 'type'),
-            bytes: (await promiseToFuture(callMethod(file, 'arrayBuffer', []))).asUint8List()
+            name: name,
+            path: name == 'index.html' ? '/' : webkitRelativePath.substring(webkitRelativePath.indexOf('/')),
+            //size: getProperty(file, 'size'),
+            content_type: getProperty(file, 'type'),
+            bytes: Future(()async{ return (await promiseToFuture(callMethod(file, 'arrayBuffer', []))).asUint8List(); })
         );
     }
     
-    String canister_upload_path() {
-        if (this.name == 'index.html') {
-            return '/';
-        } else {
-            return this.webkitRelativePath.substring(this.webkitRelativePath.indexOf('/'));
-        }
-    }
 }
 
 
@@ -231,3 +281,12 @@ Future<void> canister_upload_files(List<FileUpload> file_uploads) async {
     //await Future.wait();
 
 }
+
+
+
+enum ChooseServer {
+    temporary,
+    create_user_server,
+    user_server,
+}
+

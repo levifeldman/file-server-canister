@@ -16,7 +16,7 @@ use ic_cdk_macros::{
 
 
 
-const 
+
 const STABLE_MEMORY_HEADER_SIZE_BYTES: u64 = 1024;
 
 
@@ -140,6 +140,11 @@ fn load_state_snapshot_data() {
 
 
 
+// ------------------------------------
+
+fn user_filepath_start(user: &Principal) -> String {
+    "/" + (user.to_text())
+}
 
 
 
@@ -154,6 +159,24 @@ pub struct UploadFile {
 #[update]
 pub fn controller_upload_file(q: UploadFile) {
     caller_controller_check(&caller());
+    
+    upload_file(q);
+}
+
+#[update]
+pub fn user_upload_file(q: UploadFile) {
+    if caller() == Principal::anonymous() {
+        trap("cannot be an anonymous principal");
+    }
+    
+    upload_file(UploadFile{
+        path: user_filepath_start(&caller()) + q.path,
+        ..q
+    });
+}
+
+
+fn upload_file(q: UploadFile) {
     
     if q.chunks == 0 {
         trap("there must be at least 1 chunk.");
@@ -185,10 +208,34 @@ pub fn controller_upload_file(q: UploadFile) {
 
 }
 
+#[derive(CandidType, Deserialize)]
+pub struct UploadFileChunk {
+    path: String,
+    chunk_i: u32,
+    chunk: ByteBuf
+}
+
 #[update]
-pub fn controller_upload_file_chunks(path: String, chunk_i: u32, chunk: ByteBuf) -> () {
+pub fn controller_upload_file_chunks(q: UploadFileChunk) -> () {
     caller_controller_check(&caller());
     
+    upload_file_chunks(q);
+}
+
+#[update]
+pub fn user_upload_file_chunks(q: UploadFileChunk) -> () {
+    if caller() == Principal::anonymous() {
+        trap("cannot be an anonymous principal");
+    }
+    
+    upload_file_chunks(UploadFileChunk{
+        path: user_filepath_start(&caller()) + q.path,
+        ..q
+    });
+}
+
+
+fn upload_file_chunks(q: UploadFileChunk) {
     with_mut(&DATA, |DATA| {
         match DATA.files.get_mut(&path) {
             Some(file) => {
@@ -268,6 +315,38 @@ pub fn controller_get_file_hashes() -> Vec<(String, [u8; 32])> {
         vec
     })
 }
+
+
+#[query(manual_reply = true)]
+pub fn see_user_temporary_server_filepaths() {
+    with(&DATA, |data| {
+        reply::<(Vec<&str>,)>((data.files.keys().filter(|key: &&str| { key.starts_with(user_filepath_start(&caller())) }).collect<Vec<&str>>(),)); 
+    });
+}
+
+#[update]
+pub fn delete_user_temporary_server_files() {
+    
+    with_mut(&DATA, |data| {
+        let user_filepaths: Vec<&str> = data.files.keys().filter(|key: &&str| { key.starts_with(user_filepath_start(&caller())) }).collect<Vec<&str>>();
+        for path in user_filepaths.iter() {
+            data.files.remove(path);
+        }
+        with_mut(&FILES_HASHES, |fhs| {
+            for path in user_filepaths.into_iter() {
+                fhs.delete(path.as_bytes());
+            }
+            set_root_hash(fhs);
+        });
+    });
+    
+}
+
+#[query]
+pub fn see_user_server_canister_id() -> Option<Principal> {
+    None
+}
+
 
 
 
