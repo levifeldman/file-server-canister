@@ -1,5 +1,12 @@
+import 'dart:typed_data';
+import 'dart:convert';
 
+import 'package:ic_tools/ic_tools.dart';
+import 'package:ic_tools/candid.dart';
+import 'package:collection/collection.dart';
+import 'package:archive/archive.dart';
 
+import './main.dart';
 
 Future<void> upload_files({
     required List<FileUpload> files,
@@ -8,13 +15,17 @@ Future<void> upload_files({
     required List<Legation> legations
 }) async {
 
-    List<Future> upload_files_futures = [];
+    //List<Future> upload_files_futures = [];
+    
+    GZipEncoder gzip = GZipEncoder();
     
     for (FileUpload f in files) {
         
-        upload_files_futures.add(Future(()async{
-                
-            List<int> file_bytes = gzip.encode(await f.bytes);
+        //upload_files_futures.add(Future(()async{
+        
+        print(f.path);
+        await Future(()async{      
+            List<int> file_bytes = gzip.encode(f.bytes)!;
             Iterable<List<int>> file_bytes_chunks = file_bytes.slices(1024*1024 + 1024*512);
 
             List<CandidType> cs = c_backwards(await file_server_canister.call(
@@ -38,9 +49,10 @@ Future<void> upload_files({
             print('${f.path}: $cs');
             
             if (file_bytes_chunks.length > 1) {
-                List<Future> upload_chunks_futures = [];
+                //List<Future> upload_chunks_futures = [];
                 for (int i = 1; i<file_bytes_chunks.length; i++) {
-                    upload_chunks_futures.add(Future(()async{
+                    //upload_chunks_futures.add(Future(()async{
+                    await Future(()async{
                         List<CandidType> cschunk = c_backwards(await file_server_canister.call(
                             calltype: CallType.call,
                             method_name: 'user_upload_file_chunks',
@@ -55,13 +67,15 @@ Future<void> upload_files({
                             ])
                         ));
                         print('${f.path} : $i -> $cschunk');
-                    }));
+                    });
+                    //}));
                 }
-                await Future.wait(upload_chunks_futures);
+                //await Future.wait(upload_chunks_futures);
             }
-        }));
+        });
+        //}));
     }
-    await Future.wait(upload_files_futures);
+    //await Future.wait(upload_files_futures);
 }
 
 

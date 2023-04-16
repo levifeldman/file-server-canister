@@ -11,7 +11,7 @@ import 'package:ic_tools_web/ic_tools_web.dart' show NullMap;
 
 class CustomState {
     
-    static Canister main_canister = Canister(Principal('qiylj-niaaa-aaaai-qaiea-cai'));     
+    static Canister main_canister = Canister(Principal('z7kqr-4yaaa-aaaaj-qaa5q-cai'));     
     
     User? user;
     
@@ -31,6 +31,7 @@ class CustomState {
                     }
                 }),
             ]);
+            print(this.user!.user_temporary_server_filepaths);
         }
         
     }
@@ -63,7 +64,7 @@ class User extends ic_tools_web.User {
             method_name: 'see_user_server_canister_id',
             calltype: CallType.query,
             put_bytes: c_forwards([])
-        )).first as Option).cast_option<Principal>().value.nullmap((p)=>UserServer(user: this, canister: Canister(p)));
+        )).first as Option).cast_option<PrincipalReference>().value.nullmap((p)=>UserServer(user: this, canister: Canister(p.principal!)));
     }
     
     Future<void> delete_user_temporary_server_files() async {

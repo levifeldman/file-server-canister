@@ -101,9 +101,23 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
                 setState((){
                     state.loading = true;
                 });
+                
                 try {
-                    List<FileUpload> file_uploads = getProperty(getProperty(event, 'target'), 'files').map(FileUpload.ofAJsFile).toList(); 
-                    print(file_uploads.map((fu)=>[fu.canister_upload_path(), fu.bytes.length, fu.type]).toList());
+                
+                    //List<FileUpload> file_uploads = await Future.wait(getProperty(getProperty(event, 'target'), 'files').map<Future<FileUpload>>(FileUpload.ofAJsFile));
+                    
+                    List<FileUpload> file_uploads = [];
+                    for (Object file in getProperty(getProperty(event, 'target'), 'files')) {
+                        file_uploads.add(
+                            await FileUpload.ofAJsFile(file)
+                        );
+                        //String webkitRelativePath = getProperty(file, 'webkitRelativePath');
+                        //print(webkitRelativePath.substring(webkitRelativePath.indexOf('/')));
+                    }
+                    file_uploads.forEach((f){
+                        print(f.path);
+                        print(f.bytes.length);
+                    });
                     
                     if (choose_server_selection == ChooseServer.temporary) {
                         await state.user!.delete_user_temporary_server_files();
@@ -112,21 +126,24 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
                             file_server_canister: CustomState.main_canister, 
                             caller: state.user!.caller, 
                             legations: state.user!.legations
-                        )    
+                        );    
                     }
                     
                     
                     
-                    
-                 
-                 
-                    
-                } catch(e,s) {
+                } catch(e) {
                     print('Error syncing files: $e');
                 }
                 setState((){
                     state.loading = false;
                 });
+                
+                    
+                    
+                // print(file_uploads.map((fu)=>[fu.path, fu.content_type]).toList());
+                    
+            
+                
                 /*
                 for (Object file in getProperty(getProperty(event, 'target'), 'files')) {
                     String webkitRelativePath = getProperty(file, 'webkitRelativePath');
@@ -190,9 +207,9 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
                 child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: <Widget>[
-                        Text('welcome user: ${state.user!.principal.text}'),
+                        SelectableText('welcome user: ${state.user!.principal.text}'),
                         Container(
-                            width: 50,
+                            width: 400,
                             child: DropdownButton(
                                 items: [
                                     DropdownMenuItem(child: Text('Free Server'), value: ChooseServer.temporary),
@@ -210,7 +227,7 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
                                 elevation: 0,
                                 isExpanded: true
                             ),
-                        )
+                        ),
                         
                         /*
                         Container(
@@ -248,26 +265,29 @@ class ItemUrlPolicy implements html.UriPolicy {
 class FileUpload {
     final String name;
     final String path;
-    //final int size;
+    final int size;
     final String content_type; // mime-type
-    Future<Uint8List> bytes;
+    final Uint8List bytes;
     FileUpload._({
         required this.name,
         required this.path,
-        //required this.size,
+        required this.size,
         required this.content_type, // mime-type
         required this.bytes,
-    });
+    }) {
+        if (size != bytes.length) { throw Exception('file: ${name} bytes length != size. bytes_length: ${bytes.length}, size: $size'); }
+    }
     
-    static FileUpload ofAJsFile(Object file) {        
+    static Future<FileUpload> ofAJsFile(Object file) async {        
         String name = getProperty(file, 'name');
         String webkitRelativePath = getProperty(file, 'webkitRelativePath');
+        int index_of_first_path_separator = webkitRelativePath.indexOf('/');
         return FileUpload._(
             name: name,
-            path: name == 'index.html' ? '/' : webkitRelativePath.substring(webkitRelativePath.indexOf('/')),
-            //size: getProperty(file, 'size'),
+            path: name == 'index.html' ? '/' : webkitRelativePath.substring(index_of_first_path_separator), //index_of_first_path_separator >= 0 ? webkitRelativePath.substring(index_of_first_path_separator) : webkitRelativePath,
+            size: getProperty(file, 'size'),
             content_type: getProperty(file, 'type'),
-            bytes: Future(()async{ return (await promiseToFuture(callMethod(file, 'arrayBuffer', []))).asUint8List(); })
+            bytes: (await promiseToFuture(callMethod(file, 'arrayBuffer', []))).asUint8List()
         );
     }
     
