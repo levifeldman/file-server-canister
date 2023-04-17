@@ -140,6 +140,12 @@ fn post_upgrade() {
     });
 }
 
+// ------------------------------------
+
+const MAX_USERS_CREATE_SERVER_AT_THE_SAME_TIME: usize = 1000;
+
+
+
 
 
 // ------------------------------------
@@ -186,42 +192,116 @@ pub fn controller_upload_user_server_code(canister_code: CanisterCode) {
 // ------
 
 
+pub struct UserIsInTheMiddleOfADifferentCall{
+    kind: UserIsInTheMiddleOfADifferentCallKind,
+    must_call_continue: bool
+}
 
-#[CandidType, Deserialize]
+pub enum UserIsInTheMiddleOfADifferentCallKind {
+    UserCreateServer
+}
+
+
+
+
+
+
+// ----
+
+#[CandidType, Deserialize, Clone]
 struct UserCreateServerMidCallData {
+    start_time_nanos: u64,
     lock: bool,
+    user_create_server_quest: UserCreateServerQuest,
     // options are for the steps
     create_canister_transfer_block_height: Option<BlockHeight>, // Some() post successful transfer call
     server_canister_id: Option<Principal>,                      // Some() post successful cmc notify call
     server_canister_install_code: bool,                         // true   post successful install_code call
 }
 
+#[CandidType, Deserialize]
+pub struct UserCreateServerQuest {
+    with_icp: IcpTokens,   
+}
 
+#[CandidType, Deserialize]
+pub struct UserCreateServerSuccess {
+    server_canister_id: Principal,   
+}
+
+#[CandidType, Deserialize]
 pub enum UserCreateServerError {
+    CreateServerMinimumIcp(IcpTokens),
+    UserIsInTheMiddleOfADifferentCall(UserIsInTheMiddleOfADifferentCall),
+    Busy,
     IcpTransferError(IcpTransferError),
     MidCallError(UserCreateServerMidCallError),
 }
 
+#[CandidType, Deserialize]
 pub enum UserCreateServerMidCallError {
     CMCNotifyCreateCanisterError(),
     InstallCodeError((u32, String))
 }
 
 #[update]
-pub async fn user_create_server(with_icp: IcpTokens) -> Result<UserCreateServerSuccess, UserCreateServerError> {
+pub async fn user_create_server(q: UserCreateServerQuest) -> Result<UserCreateServerSuccess, UserCreateServerError> {
+    
+    let user_id: Principal = caller();
+    
+    if q.with_icp < MINIMUM_CREATE_SERVER_ICP {
+        return Err(UserCreateServerError::CreateServerMinimumIcp(MINIMUM_CREATE_SERVER_ICP))
+    }
+    
+    let user_create_server_mid_call_data: UserCreateServerMidCallData = with_mut(&DATA, |data| {
+        match data.users_create_server_mid_call_data.get(&user_id) {
+            Some(user_create_server_mid_call_data) => {
+                return Err(UserCreateServerError::UserIsInTheMiddleOfADifferentCall(UserIsInTheMiddleOfADifferentCall{ 
+                    kind: UserIsInTheMiddleOfADifferentCallKind::UserCreateServer, 
+                    must_call_continue: !user_create_server_mid_call_data.lock 
+                }));   
+            },
+            None => {
+                if data.users_create_server_mid_call_data.len() >= MAX_USERS_CREATE_SERVER_AT_THE_SAME_TIME {
+                    return Err(UserCreateServerError::Busy);
+                }
+                let user_create_server_mid_call_data: UserCreateServerMidCallData = UserCreateServerMidCallData{
+                    start_time_nanos: time(),
+                    lock: true,
+                    user_create_server_quest: q,
+                    create_canister_transfer_block_height: None,
+                    server_canister_id: None,
+                    server_canister_install_code: false,
+                };
+                data.users_create_server_mid_call_data.insert(user_id, user_create_server_mid_call_data.clone());
+                Ok(user_create_server_mid_call_data)
+            }
+        }
+    })?;
+    
+    user_create_server_(user_id, user_create_server_mid_call_data).await
     
     // check if ongoing call data, if yes, if ongoing call data .lock == true: return ongoing call, if ongoing call data .lock == false: turn lock on, put ongoing call data into the hashmap.
     
+    
+}
+
+
+async fn user_create_server_(user_id: Principal, mut user_create_server_mid_call_data: UserCreateServerMidCallData) 
+-> Result<UserCreateServerSuccess, UserCreateServerError> {
+
     // try to send the transfer, if fail delete ongoing call data and return final-error
+    
+    
+    
+    
     
     // try to call notify on the cmc, if fail unlock call data, keep call data in a hashmap and return mid-call-error
     
     // try to install_code, if success delete mid-call-data, put canister into user_servers map, and return user_server_canister_id. if fail, unlock call data, keep call data in mid-call-data-map, and return mid-call-error 
         
+
 }
-
-
-
 
 
 // --------

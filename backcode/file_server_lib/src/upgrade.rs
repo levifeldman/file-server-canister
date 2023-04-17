@@ -9,7 +9,7 @@ pub const STABLE_MEMORY_HEADER_SIZE_BYTES: u64 = 1024;
 
 
 
-pub fn pre_upgrade<T: CandidType + Deserialize, F: FnOnce()>(canister_data: T) {
+pub fn pre_upgrade<T: CandidType + Deserialize>(canister_data: T) {
     
     with_mut(&FILE_SERVER_DATA, |file_server_data| {
         file_server_data.files_hashes = with(&FILES_HASHES, |files_hashes| { 
