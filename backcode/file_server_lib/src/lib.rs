@@ -16,7 +16,7 @@ use serde_bytes::ByteBuf;
 
 use num_traits::cast::ToPrimitive;
 
-mod tools;
+pub mod tools;
 use tools::{
     localkey::{
         refcell::{
@@ -27,7 +27,7 @@ use tools::{
     create_opt_stream_callback_token,
 };
 
-mod types;
+pub mod types;
 use types::{
     StreamStrategy,
     HttpRequest,
@@ -41,10 +41,10 @@ use data::{
     FILES,
 };
 
-mod upgrade;
+pub mod upgrade;
 pub use upgrade::{pre_upgrade, post_upgrade};
 
-mod files;
+pub mod files;
 
 
 

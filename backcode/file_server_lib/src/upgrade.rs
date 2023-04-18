@@ -56,8 +56,8 @@ pub const STABLE_MEMORY_HEADER_SIZE_BYTES: u64 = 1024;
 
 #[derive(CandidType, Deserialize)]
 struct FileServerData {
-    pub files: Files,
-    pub files_hashes: Vec<(String, [u8; 32])>,
+    files: Files,
+    files_hashes: Vec<(String, [u8; 32])>,
 }
 
 
@@ -109,24 +109,19 @@ pub fn post_upgrade<OldCanisterData, CanisterData, F>(opt_old_to_new_convert: Op
         CanisterData: CandidType + for<'a> Deserialize<'a>,
         F: FnOnce(OldCanisterData) -> CanisterData
     {
-    
 
-    let mut file_server_data_candid_bytes_len_u64_be_bytes: [u8; 8] = [0; 8];
-    stable64_read(STABLE_MEMORY_HEADER_SIZE_BYTES, &mut file_server_data_candid_bytes_len_u64_be_bytes);
-    let file_server_data_candid_bytes_len_u64: u64 = u64::from_be_bytes(file_server_data_candid_bytes_len_u64_be_bytes); 
-    
-    let mut file_server_data_candid_bytes: Vec<u8> = vec![0; file_server_data_candid_bytes_len_u64 as usize];
-    stable64_read(STABLE_MEMORY_HEADER_SIZE_BYTES + 8, &mut file_server_data_candid_bytes);
-    let file_server_data_candid_bytes: Vec<u8> = file_server_data_candid_bytes; // cancel mut
 
-    let mut canister_data_candid_bytes_len_u64_be_bytes: [u8; 8] = [0; 8];
-    stable64_read(STABLE_MEMORY_HEADER_SIZE_BYTES + 8 + file_server_data_candid_bytes_len_u64, &mut canister_data_candid_bytes_len_u64_be_bytes);
-    let canister_data_candid_bytes_len_u64: u64 = u64::from_be_bytes(canister_data_candid_bytes_len_u64_be_bytes); 
-    
-    let mut canister_data_candid_bytes: Vec<u8> = vec![0; canister_data_candid_bytes_len_u64 as usize];
-    stable64_read(STABLE_MEMORY_HEADER_SIZE_BYTES + 8 + file_server_data_candid_bytes_len_u64 + 8, &mut canister_data_candid_bytes);
-    let canister_data_candid_bytes: Vec<u8> = canister_data_candid_bytes; // cancel mut
+    let file_server_data_candid_bytes_len_u64: u64 = read_u64_at_position(STABLE_MEMORY_HEADER_SIZE_BYTES); 
+    let file_server_data_candid_bytes: Vec<u8> = read_bytes_at_position_for_length(
+        STABLE_MEMORY_HEADER_SIZE_BYTES + 8, 
+        file_server_data_candid_bytes_len_u64
+    );
 
+    let canister_data_candid_bytes_len_u64: u64 = read_u64_at_position(STABLE_MEMORY_HEADER_SIZE_BYTES + 8 + file_server_data_candid_bytes_len_u64); 
+    let canister_data_candid_bytes: Vec<u8> = read_bytes_at_position_for_length(
+        STABLE_MEMORY_HEADER_SIZE_BYTES + 8 + file_server_data_candid_bytes_len_u64 + 8,
+        canister_data_candid_bytes_len_u64
+    );
     // ---
     
     let mut file_server_data: FileServerData = match decode_one::<FileServerData>(&file_server_data_candid_bytes) {
@@ -169,5 +164,22 @@ pub fn post_upgrade<OldCanisterData, CanisterData, F>(opt_old_to_new_convert: Op
     canister_data
 }
 
+
+
+
+
+
+
+fn read_u64_at_position(position: u64) -> u64 {
+    let mut u64_be_bytes: [u8; 8] = [0; 8];
+    stable64_read(position, &mut u64_be_bytes);
+    u64::from_be_bytes(u64_be_bytes)
+}
+
+fn read_bytes_at_position_for_length(position: u64, length: u64) -> Vec<u8> {
+    let mut bytes: Vec<u8> = vec![0; length as usize];
+    stable64_read(position, &mut bytes);
+    bytes
+}
 
 

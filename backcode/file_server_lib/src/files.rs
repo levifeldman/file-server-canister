@@ -33,19 +33,12 @@ use crate::{
     types::{
         File,
         Files,
-        FilesHashes
+        FilesHashes,
+        UploadFile,
+        UploadFileChunk
     }
 };
 
-
-
-#[derive(CandidType, Deserialize)]
-pub struct UploadFile {
-    pub path: String,
-    pub headers: Vec<(String, String)>,
-    pub first_chunk: ByteBuf,
-    pub chunks: u32
-}
 
 
 pub fn upload_file(q: UploadFile) {
@@ -80,16 +73,10 @@ pub fn upload_file(q: UploadFile) {
 
 }
 
-#[derive(CandidType, Deserialize)]
-pub struct UploadFileChunk {
-    path: String,
-    chunk_i: u32,
-    chunk: ByteBuf
-}
 
 
 
-fn upload_file_chunk(q: UploadFileChunk) {
+pub fn upload_file_chunk(q: UploadFileChunk) {
     with_mut(&FILES, |files| {
         match files.get_mut(&q.path) {
             Some(file) => {

@@ -1,6 +1,28 @@
 
 
-use ic_ledger_types::{
+use ic_cdk::{
+    export::{
+        Principal,
+        candid::{
+            CandidType,
+            Deserialize,
+            encode_one,
+            decode_one
+        },
+    },
+    api::{
+        time,
+        call::{
+            call_raw128,
+            call_with_payment128,
+            call
+        }
+    }
+};
+
+
+
+pub use ic_ledger_types::{
     Tokens as IcpTokens,
     BlockIndex as IcpBlockHeight,
     MAINNET_CYCLES_MINTING_CANISTER_ID,
@@ -9,7 +31,10 @@ use ic_ledger_types::{
     transfer as icp_transfer,
     TransferArgs as IcpTransferArgs,
     TransferError as IcpTransferError,
-    Subaccount as IcpSubaccount
+    Subaccount as IcpSubaccount,
+    Timestamp as IcpTimestamp,
+    Memo as IcpMemo,
+    AccountIdentifier as IcpId
 };
 
 
@@ -55,6 +80,9 @@ pub fn principal_icp_subaccount(principal: &Principal) -> IcpSubaccount {
 
 
 
+
+pub const ICP_LEDGER_CREATE_CANISTER_MEMO: IcpMemo = IcpMemo(0x41455243); // == 'CREA'
+pub const ICP_LEDGER_TOP_UP_CANISTER_MEMO: IcpMemo = IcpMemo(0x50555054); // == 'TPUP'
 
 
 
@@ -178,6 +206,7 @@ pub async fn topup_cycles_cmc_notify(topup_cycles_ledger_transfer_block_height: 
 // management create canister types
 
 pub mod management_canister {
+    use super::*;
 
     #[derive(CandidType, Deserialize)]
     pub struct CanisterSettings {
@@ -194,7 +223,7 @@ pub mod management_canister {
     
     #[derive(CandidType, Deserialize)]
     pub struct CanisterId {
-        canister_id : Principal
+        pub canister_id : Principal
     }
     
     #[derive(CandidType, Deserialize)]
@@ -206,10 +235,10 @@ pub mod management_canister {
     
     #[derive(CandidType, Deserialize)]
     pub struct InstallCodeQuest<'a> {
-        mode : InstallCodeMode,
-        canister_id : Principal,
-        wasm_module : &'a [u8],
-        arg : &'a [u8],
+        pub mode : InstallCodeMode,
+        pub canister_id : Principal,
+        pub wasm_module : &'a [u8],
+        pub arg : &'a [u8],
     }
     
     
@@ -220,12 +249,12 @@ pub mod management_canister {
             (create_canister_quest,),
             with_cycles,
         ).await {
-            Ok(canister_id_record) => Ok(canister_id_record),
+            Ok((canister_id_record,)) => Ok(canister_id_record),
             Err(call_error) => Err((call_error.0 as u32, call_error.1)),
         }
     }
     
-    pub async fn install_code(install_code_quest: InstallCodeQuest) -> Result<(), (u32, String)> {
+    pub async fn install_code(install_code_quest: InstallCodeQuest<'_>) -> Result<(), (u32, String)> {
         match call::<(InstallCodeQuest,), ()>(
             Principal::management_canister(),
             "install_code",

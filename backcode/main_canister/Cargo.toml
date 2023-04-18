@@ -13,13 +13,11 @@ crate-type = ["cdylib"]
 
 
 [dependencies]
+file_server_lib = { path = "../file_server_lib" }
 ic-cdk = "0.7.4"
 candid = "0.8.4"
 serde = "1.0.137"
 serde_bytes = "0.11.6"
-serde_cbor = "0.11.2"
-base64 = "0.13.0"
 sha2 = "0.9.1"
-ic-certified-map = "0.3.4"
-num-traits = "0.2.15"
 ic-ledger-types = "0.4.2"
+

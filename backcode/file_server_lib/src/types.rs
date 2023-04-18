@@ -71,3 +71,21 @@ pub struct StreamCallbackHttpResponse<'a> {
 }
 
 
+
+
+
+#[derive(CandidType, Deserialize)]
+pub struct UploadFile {
+    pub path: String,
+    pub headers: Vec<(String, String)>,
+    pub first_chunk: ByteBuf,
+    pub chunks: u32
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct UploadFileChunk {
+    pub path: String,
+    pub chunk_i: u32,
+    pub chunk: ByteBuf
+}
+

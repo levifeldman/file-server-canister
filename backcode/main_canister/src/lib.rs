@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 use std::cell::RefCell;
 
 use ic_cdk::{
@@ -27,41 +27,44 @@ use ic_cdk::{
         call::{
             reply
         },
-        stable::{
-            WASM_PAGE_SIZE_IN_BYTES as WASM_PAGE_SIZE_BYTES,
-            stable64_grow,
-            stable64_read,
-            stable64_write,
-            stable64_size,
-        },
+        time
     }
 };
 
-use ic_ledger_types::{
-    Tokens as IcpTokens,
-    BlockIndex as BlockHeight,
-    TransferError as IcpTransferError
-    
-};
 
 use serde_bytes::ByteBuf;
 use sha2::Digest;
-use num_traits::cast::ToPrimitive;
+
+
+use file_server_lib::{
+    types::{
+        UploadFile,
+        UploadFileChunk
+    },
+    files::{
+        upload_file,
+        upload_file_chunk,
+        clear_files
+    },
+    tools::{
+        localkey::{
+            refcell::{
+                with,
+                with_mut
+            }
+        }
+    }
+};
 
 
 
-
-
-pub mod tools;
+mod tools;
 use tools::*;
 use management_canister::{self, *};
 
 
 
-use file_server_lib::tools::localkey::{
-    refcell::{with,with_mut},
-    //cell::{set,get}
-};
+
 
 
 
@@ -84,6 +87,10 @@ pub struct UserServerData {
     canister_id: Principal,
     module_hash: [u8; 32],
 }
+
+
+#[derive(CandidType, Deserialize)]
+pub struct OldData {}
 
 
 #[derive(CandidType, Deserialize)]
@@ -135,7 +142,7 @@ fn pre_upgrade() {
 
 #[post_upgrade]
 fn post_upgrade() {
-    let canister_data: Data = file_server_lib::post_upgrade(None);
+    let canister_data: Data = file_server_lib::post_upgrade(None::<fn(OldData) -> Data>);
     with_mut(&DATA, |data| {
         *data = canister_data;
     });
@@ -193,12 +200,12 @@ pub fn controller_upload_user_server_code(canister_code: CanisterCode) {
 
 // ------
 
-
+#[derive(CandidType, Deserialize)]
 pub struct UserIsInTheMiddleOfADifferentCall{
     kind: UserIsInTheMiddleOfADifferentCallKind,
     must_call_continue: bool
 }
-
+#[derive(CandidType, Deserialize)]
 pub enum UserIsInTheMiddleOfADifferentCallKind {
     UserCreateServer
 }
@@ -222,7 +229,7 @@ struct UserCreateServerMidCallData {
     server_canister_module_hash: Option<[u8; 32]>,                      // Some() post successful install_code call
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Clone)]
 pub struct UserCreateServerQuest {
     with_icp: IcpTokens,   
 }
@@ -305,8 +312,8 @@ async fn user_create_server_(user_id: Principal, mut user_create_server_mid_call
     // send the transfer, if fail delete ongoing call data and return final-error
     if user_create_server_mid_call_data.topup_cycles_ledger_transfer_block_height.is_none() {
         match topup_cycles_ledger_transfer(
-            user_create_server_mid_call_data.user_create_canister_quest.with_icp,
-            Some(principal_icp_subaccount(user_id)),
+            user_create_server_mid_call_data.user_create_server_quest.with_icp,
+            Some(principal_icp_subaccount(&user_id)),
             ic_cdk::api::id()
         ).await {
             Ok(block_height) => {
@@ -339,7 +346,7 @@ async fn user_create_server_(user_id: Principal, mut user_create_server_mid_call
     
     // create a canister using management canister create_canister method
     if user_create_server_mid_call_data.server_canister_id.is_none() {
-        management_canister::create_canister(
+        match management_canister::create_canister(
             CreateCanisterQuest{
                 settings: None
             },
@@ -396,12 +403,12 @@ async fn user_create_server_(user_id: Principal, mut user_create_server_mid_call
             }
         }
         
-        data.user_create_server_mid_call_data.remove(&user_id);
+        data.users_create_server_mid_call_data.remove(&user_id);
     });
     
-    UserCreateServerSuccess{
+    Ok(UserCreateServerSuccess{
         server_canister_id: user_create_server_mid_call_data.server_canister_id.unwrap(),   
-    }
+    })
 }
 
 
@@ -464,7 +471,7 @@ pub fn see_user_server_canister_ids() { //-> Vec<&Principal> {
         reply::<(Vec<&Principal>,)>((
             data.user_servers.get(&caller()).unwrap_or(&vec![])
             .iter()
-            .map(|user_server_data: &&UserServerData| { 
+            .map(|user_server_data| { 
                 &(user_server_data.canister_id)
             })
             .collect::<Vec<&Principal>>()
