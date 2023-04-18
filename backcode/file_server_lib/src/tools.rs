@@ -2,17 +2,20 @@
 use ic_cdk::{
     export::{
         candid::{Nat},
-        Principal,
     },
-    trap,
     api::{data_certificate, set_certified_data}
 };
 use ic_certified_map::{self, HashTree, AsHashTree};
 
 use crate::{
-    FILES_HASHES, 
-    DATA,
-    types::*
+    data::{
+        FILES_HASHES, 
+    },
+    types::{
+        File,
+        FilesHashes,
+        StreamCallbackToken
+    }
 };
 
 use sha2::Digest;
@@ -71,14 +74,6 @@ use localkey::{
     refcell::{with},
     //cell::{set,get}
 };
-
-
-
-pub fn caller_controller_check(caller: &Principal) {
-    if with(&DATA, |data| { data.controllers.contains(caller) }) == false {
-        trap("Caller must be a controller for this method.")
-    }
-}
 
 
 

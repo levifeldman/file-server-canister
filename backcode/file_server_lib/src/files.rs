@@ -1,6 +1,41 @@
 
 
 
+use ic_cdk::{
+    export::{
+        candid::{
+            CandidType,
+            Deserialize
+        }
+    },
+    trap
+};
+
+use serde_bytes::ByteBuf;
+
+use sha2::Digest;
+
+use crate::{
+    tools::{
+        localkey::{
+            refcell::{
+                with,
+                with_mut,
+            }
+        },
+        sha256,
+        set_root_hash
+    },
+    data::{
+        FILES_HASHES,
+        FILES,
+    },
+    types::{
+        File,
+        Files,
+        FilesHashes
+    }
+};
 
 
 
@@ -29,8 +64,8 @@ pub fn upload_file(q: UploadFile) {
         });
     }
 
-    with_mut(&FILE_SERVER_DATA, |data| {        
-        data.files.insert(
+    with_mut(&FILES, |files| {        
+        files.insert(
             q.path, 
             File{
                 headers: q.headers,
@@ -55,8 +90,8 @@ pub struct UploadFileChunk {
 
 
 fn upload_file_chunk(q: UploadFileChunk) {
-    with_mut(&FILE_SERVER_DATA, |data| {
-        match data.files.get_mut(&q.path) {
+    with_mut(&FILES, |files| {
+        match files.get_mut(&q.path) {
             Some(file) => {
                 file.content_chunks[<u32 as TryInto<usize>>::try_into(q.chunk_i).unwrap()] = q.chunk;
                 
@@ -98,8 +133,8 @@ fn upload_file_chunk(q: UploadFileChunk) {
 
 pub fn clear_files() {
 
-    with_mut(&FILE_SERVER_DATA, |data| {
-        data.files = Files::new();
+    with_mut(&FILES, |files| {
+        *files = Files::new();
     });
 
     with_mut(&FILES_HASHES, |fhs| {
@@ -111,8 +146,8 @@ pub fn clear_files() {
 
 pub fn clear_file(path: &String) {
     
-    with_mut(&FILE_SERVER_DATA, |data| {
-        data.files.remove(path);
+    with_mut(&FILES, |files| {
+        files.remove(path);
     });
 
     with_mut(&FILES_HASHES, |fhs| {
@@ -143,8 +178,8 @@ pub fn get_file_hash(path: &str) -> Option<[u8; 32]> {
 }
 
 pub fn see_filepaths() -> Vec<String> {
-    with(&FILE_SERVER_DATA, |data| {
-        data.files.keys().map(|path: &String| { path.clone() }).collect::<Vec<String>>()
+    with(&FILES, |files| {
+        files.keys().map(|path: &String| { path.clone() }).collect::<Vec<String>>()
     })
 }
 

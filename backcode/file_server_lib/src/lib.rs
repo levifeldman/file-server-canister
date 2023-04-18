@@ -1,12 +1,45 @@
 
+use ic_cdk::{
+    api::{
+        call::{
+            reply,
+            arg_data
+        }
+    },
+    export::{
+        candid::{Func}
+    },
+    trap
+};
 
+use serde_bytes::ByteBuf;
 
+use num_traits::cast::ToPrimitive;
 
 mod tools;
+use tools::{
+    localkey::{
+        refcell::{
+            with
+        }
+    },
+    make_file_certificate_header,
+    create_opt_stream_callback_token,
+};
 
 mod types;
+use types::{
+    StreamStrategy,
+    HttpRequest,
+    HttpResponse,
+    StreamCallbackTokenBackwards,
+    StreamCallbackHttpResponse
+};
 
 mod data;
+use data::{
+    FILES,
+};
 
 mod upgrade;
 pub use upgrade::{pre_upgrade, post_upgrade};
@@ -24,8 +57,8 @@ mod files;
 extern "C" fn canister_query_see_filepaths() {
     ic_cdk::setup();
 
-    with(&FILE_SERVER_DATA, |data| {
-        reply::<(Vec<&String>,)>((data.files.keys().collect::<Vec<&String>>(),)); 
+    with(&FILES, |files| {
+        reply::<(Vec<&String>,)>((files.keys().collect::<Vec<&String>>(),)); 
     });
 }
 
@@ -37,8 +70,8 @@ extern "C" fn http_request() {
     
     let path: &str = quest.url.split("?").next().unwrap();
     
-    with(&FILE_SERVER_DATA, |data| {
-        match data.files.get(path) {
+    with(&FILES, |files| {
+        match files.get(path) {
             None => {
                 reply::<(HttpResponse,)>(
                     (HttpResponse {
@@ -82,8 +115,8 @@ extern "C" fn http_request_stream_callback() {
     
     let (token,): (StreamCallbackTokenBackwards,) = arg_data::<(StreamCallbackTokenBackwards,)>(); 
 
-    with(&FILE_SERVER_DATA, |data| {
-        match data.files.get(&token.key) {
+    with(&FILES, |files| {
+        match files.get(&token.key) {
             None => {
                 trap("the file is not found");        
             }, 
