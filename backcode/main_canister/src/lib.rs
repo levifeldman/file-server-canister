@@ -39,7 +39,8 @@ use sha2::Digest;
 use file_server_lib::{
     types::{
         UploadFile,
-        UploadFileChunk
+        UploadFileChunk,
+        UserServerInit
     },
     files::{
         upload_file,
@@ -68,7 +69,7 @@ use management_canister::{self, *};
 
 
 
-#[derive(CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Clone)]
 pub struct CanisterCode {
     hash: [u8; 32],
     module: ByteBuf,
@@ -252,6 +253,7 @@ pub enum UserCreateServerError {
 pub enum UserCreateServerMidCallError {
     TopUpCyclesCmcNotifyError(TopUpCyclesCmcNotifyError),
     CreateCanisterCallError((u32, String)),
+    UserServerInitCandidEncodeError(String),
     InstallCodeCallError((u32, String))
 }
 
@@ -364,22 +366,28 @@ async fn user_create_server_(user_id: Principal, mut user_create_server_mid_call
     
     // install_code, if success delete mid-call-data, put canister into user_servers map, and return user_server_canister_id. if fail, unlock call data, keep call data in mid-call-data-map, and return mid-call-error 
     if user_create_server_mid_call_data.server_canister_module_hash.is_none() {
-        let (module_hash, call_future): ([u8; 32], _) = with(&DATA, |data| {
-            (
-                data.user_server_code.hash,
-                management_canister::install_code(
-                    InstallCodeQuest{
-                        mode: InstallCodeMode::install,
-                        canister_id: user_create_server_mid_call_data.server_canister_id.unwrap(),
-                        wasm_module: &(data.user_server_code.module),
-                        arg: todo!()
-                    }
-                )
-            )
-        });
-        match call_future.await {
+        let user_server_init: Vec<u8> = match encode_one(
+            UserServerInit{
+                user_id: user_id
+            }
+        ) {
+            Ok(b) => b,
+            Err(e) => {
+                unlock_and_write_user_create_server_mid_call_data(user_id, user_create_server_mid_call_data);
+                return Err(UserCreateServerError::MidCallError(UserCreateServerMidCallError::UserServerInitCandidEncodeError(format!("{:?}", e))));
+            }
+        };
+        let user_server_code: CanisterCode = with(&DATA, |data| { data.user_server_code.clone() });
+        match management_canister::install_code(
+            InstallCodeQuest{
+                mode: InstallCodeMode::install,
+                canister_id: user_create_server_mid_call_data.server_canister_id.unwrap(),
+                wasm_module: &(user_server_code.module),
+                arg: &user_server_init
+            }
+        ).await {
             Ok(()) => {
-                user_create_server_mid_call_data.server_canister_module_hash = Some(module_hash);
+                user_create_server_mid_call_data.server_canister_module_hash = Some(user_server_code.hash);
             },
             Err(install_code_call_error) => {
                 unlock_and_write_user_create_server_mid_call_data(user_id, user_create_server_mid_call_data);

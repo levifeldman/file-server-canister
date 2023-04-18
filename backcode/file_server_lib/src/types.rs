@@ -2,6 +2,7 @@
 use serde_bytes::ByteBuf;
 
 use ic_cdk::export::{
+    Principal,
     candid::{CandidType, Deserialize, Func, Nat}
 };
 use ic_certified_map::RbTree;
@@ -89,3 +90,8 @@ pub struct UploadFileChunk {
     pub chunk: ByteBuf
 }
 
+
+#[derive(CandidType, Deserialize)]
+pub struct UserServerInit{
+    pub user_id: Principal
+}
