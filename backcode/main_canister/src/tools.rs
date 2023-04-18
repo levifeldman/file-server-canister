@@ -7,7 +7,7 @@ use ic_ledger_types::{
     MAINNET_LEDGER_CANISTER_ID,
     DEFAULT_FEE as ICP_LEDGER_TRANSFER_DEFAULT_FEE,
     transfer as icp_transfer,
-    TransferArgs as IcpTransferArgs
+    TransferArgs as IcpTransferArgs,
     TransferError as IcpTransferError,
     Subaccount as IcpSubaccount
 };
@@ -100,12 +100,7 @@ pub enum TopUpCyclesLedgerTransferError {
 
 pub async fn topup_cycles_ledger_transfer(icp: IcpTokens, from_subaccount: Option<IcpSubaccount>, topup_canister: Principal) -> Result<IcpBlockHeight, TopUpCyclesLedgerTransferError> {
 
-}
-
-
-
-
-    let cmc_icp_transfer_block_height: IcpBlockHeight = match icp_transfer(
+    let block_height: IcpBlockHeight = match icp_transfer(
         MAINNET_LEDGER_CANISTER_ID,
         IcpTransferArgs {
             memo: ICP_LEDGER_TOP_UP_CANISTER_MEMO,
@@ -119,64 +114,130 @@ pub async fn topup_cycles_ledger_transfer(icp: IcpTokens, from_subaccount: Optio
         Ok(transfer_call_sponse) => match transfer_call_sponse {
             Ok(block_index) => block_index,
             Err(transfer_error) => {
-                return Err(LedgerTopupCyclesCmcIcpTransferError::IcpTransferError(transfer_error));
+                return Err(TopUpCyclesLedgerTransferError::IcpTransferError(transfer_error));
             }
         },
         Err(transfer_call_error) => {
-            return Err(LedgerTopupCyclesCmcIcpTransferError::IcpTransferCallError((transfer_call_error.0 as u32, transfer_call_error.1)));
+            return Err(TopUpCyclesLedgerTransferError::IcpTransferCallError((transfer_call_error.0 as u32, transfer_call_error.1)));
         }
     };
     
-    Ok(cmc_icp_transfer_block_height)
+    Ok(block_height)
 }
 
 
 #[derive(CandidType, Deserialize)]
-pub enum LedgerTopupCyclesCmcNotifyError {
+pub enum TopUpCyclesCmcNotifyError {
     CmcNotifyTopUpQuestCandidEncodeError(String),
     CmcNotifyCallError((u32, String)),
     CmcNotifySponseCandidDecodeError{candid_error: String, candid_bytes: Vec<u8>},
     CmcNotifyError(CmcNotifyError),
 }
 
-pub async fn ledger_topup_cycles_cmc_notify(cmc_icp_transfer_block_height: IcpBlockHeight, topup_canister_id: Principal) -> Result<Cycles, LedgerTopupCyclesCmcNotifyError> {
+pub async fn topup_cycles_cmc_notify(topup_cycles_ledger_transfer_block_height: IcpBlockHeight, topup_canister: Principal) -> Result<Cycles, TopUpCyclesCmcNotifyError> {
 
     let topup_cycles_cmc_notify_call_candid: Vec<u8> = match encode_one(
-        & CmcNotifyTopUpCyclesQuest {
-            block_index: cmc_icp_transfer_block_height,
-            canister_id: topup_canister_id
+        & CmcNotifyTopUpQuest {
+            block_index: topup_cycles_ledger_transfer_block_height,
+            canister_id: topup_canister
         }
     ) {
         Ok(b) => b,
         Err(candid_error) => {
-            return Err(LedgerTopupCyclesCmcNotifyError::CmcNotifyTopUpQuestCandidEncodeError(format!("{}", candid_error)));
+            return Err(TopUpCyclesCmcNotifyError::CmcNotifyTopUpQuestCandidEncodeError(format!("{:?}", candid_error)));
         }
     };
 
-    let cycles: Cycles = match call_raw128(
+    let topup_cycles: Cycles = match call_raw128(
         MAINNET_CYCLES_MINTING_CANISTER_ID,
         "notify_top_up",
         &topup_cycles_cmc_notify_call_candid,
         0
     ).await {
-        Ok(candid_bytes) => match decode_one::<NotifyTopUpResult>(&candid_bytes) {
+        Ok(candid_bytes) => match decode_one::<CmcNotifyTopUpResult>(&candid_bytes) {
             Ok(notify_topup_result) => match notify_topup_result {
-                Ok(cycles) => cycles,
+                Ok(topup_cycles) => topup_cycles,
                 Err(cmc_notify_error) => {
-                    return Err(LedgerTopupCyclesCmcNotifyError::CmcNotifyError(cmc_notify_error));
+                    return Err(TopUpCyclesCmcNotifyError::CmcNotifyError(cmc_notify_error));
                 }
             },
             Err(candid_error) => {
-                return Err(LedgerTopupCyclesCmcNotifyError::CmcNotifySponseCandidDecodeError{candid_error: format!("{}", candid_error), candid_bytes: candid_bytes});
+                return Err(TopUpCyclesCmcNotifyError::CmcNotifySponseCandidDecodeError{candid_error: format!("{:?}", candid_error), candid_bytes: candid_bytes});
             }
         },
         Err(notify_call_error) => {
-            return Err(LedgerTopupCyclesCmcNotifyError::CmcNotifyCallError((notify_call_error.0 as u32, notify_call_error.1)));
+            return Err(TopUpCyclesCmcNotifyError::CmcNotifyCallError((notify_call_error.0 as u32, notify_call_error.1)));
         }
     };
 
-    Ok(cycles)
+    Ok(topup_cycles)
 }
+
+
+
+// management create canister types
+
+pub mod management_canister {
+
+    #[derive(CandidType, Deserialize)]
+    pub struct CanisterSettings {
+        pub controllers : Option<Vec<Principal>>,
+        pub compute_allocation : Option<u128>,
+        pub memory_allocation : Option<u128>,
+        pub freezing_threshold : Option<u128>,
+    }
+
+    #[derive(CandidType, Deserialize)]
+    pub struct CreateCanisterQuest {
+        pub settings : Option<CanisterSettings>
+    }
+    
+    #[derive(CandidType, Deserialize)]
+    pub struct CanisterId {
+        canister_id : Principal
+    }
+    
+    #[derive(CandidType, Deserialize)]
+    pub enum InstallCodeMode {
+        install, 
+        reinstall, 
+        upgrade,
+    }
+    
+    #[derive(CandidType, Deserialize)]
+    pub struct InstallCodeQuest<'a> {
+        mode : InstallCodeMode,
+        canister_id : Principal,
+        wasm_module : &'a [u8],
+        arg : &'a [u8],
+    }
+    
+    
+    pub async fn create_canister(create_canister_quest: CreateCanisterQuest, with_cycles: Cycles) -> Result<CanisterId, (u32, String)> {
+        match call_with_payment128::<(CreateCanisterQuest,), (CanisterId,)>(            
+            Principal::management_canister(),
+            "create_canister",
+            (create_canister_quest,),
+            with_cycles,
+        ).await {
+            Ok(canister_id_record) => Ok(canister_id_record),
+            Err(call_error) => Err((call_error.0 as u32, call_error.1)),
+        }
+    }
+    
+    pub async fn install_code(install_code_quest: InstallCodeQuest) -> Result<(), (u32, String)> {
+        match call::<(InstallCodeQuest,), ()>(
+            Principal::management_canister(),
+            "install_code",
+            (install_code_quest,)
+        ).await {
+            Ok(()) => Ok(()),
+            Err(call_error) => Err((call_error.0 as u32, call_error.1))
+        }
+    }
+
+}
+
 
 
 
