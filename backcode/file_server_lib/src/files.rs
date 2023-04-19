@@ -2,12 +2,6 @@
 
 
 use ic_cdk::{
-    export::{
-        candid::{
-            CandidType,
-            Deserialize
-        }
-    },
     trap
 };
 
@@ -57,9 +51,9 @@ pub fn upload_file(q: UploadFile) {
         });
     }
 
-    with_mut(&FILES, |files| {        
+    with_mut(&FILES, |files| {
         files.insert(
-            q.path, 
+            q.path,
             File{
                 headers: q.headers,
                 content_chunks: {
@@ -68,7 +62,7 @@ pub fn upload_file(q: UploadFile) {
                     v
                 }
             }
-        ); 
+        );
     });
 
 }

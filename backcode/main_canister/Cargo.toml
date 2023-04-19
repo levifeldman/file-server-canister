@@ -1,5 +1,5 @@
 [package]
-name = "file_server_main_canister"
+name = "main_canister"
 version = "0.1.0"
 edition = "2021"
 authors = ["Levi Feldman <levifeldman37@gmail.com>"]

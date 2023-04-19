@@ -44,7 +44,7 @@ pub use ic_ledger_types::{
 
 
 
-pub fn principal_as_thirty_bytes(p: &Principal) -> [u8; 30] {
+fn principal_as_thirty_bytes(p: &Principal) -> [u8; 30] {
     let mut bytes: [u8; 30] = [0; 30];
     let p_bytes: &[u8] = p.as_slice();
     bytes[0] = p_bytes.len() as u8; 
@@ -52,10 +52,11 @@ pub fn principal_as_thirty_bytes(p: &Principal) -> [u8; 30] {
     bytes
 }
 
-pub fn thirty_bytes_as_principal(bytes: &[u8; 30]) -> Principal {
+/*
+fn thirty_bytes_as_principal(bytes: &[u8; 30]) -> Principal {
     Principal::from_slice(&bytes[1..1 + bytes[0] as usize])
 } 
-
+*/
 
 #[test]
 fn thirty_bytes_principal() {
@@ -81,7 +82,7 @@ pub fn principal_icp_subaccount(principal: &Principal) -> IcpSubaccount {
 
 
 
-pub const ICP_LEDGER_CREATE_CANISTER_MEMO: IcpMemo = IcpMemo(0x41455243); // == 'CREA'
+//pub const ICP_LEDGER_CREATE_CANISTER_MEMO: IcpMemo = IcpMemo(0x41455243); // == 'CREA'
 pub const ICP_LEDGER_TOP_UP_CANISTER_MEMO: IcpMemo = IcpMemo(0x50555054); // == 'TPUP'
 
 
@@ -92,11 +93,13 @@ pub const ICP_LEDGER_TOP_UP_CANISTER_MEMO: IcpMemo = IcpMemo(0x50555054); // == 
 
 pub type Cycles = u128;
 
+/*
 #[derive(CandidType, Deserialize)]
 pub struct CmcNotifyCreateCanisterQuest {
     pub block_index: IcpBlockHeight,
     pub controller: Principal,
 }
+*/
 
 #[derive(CandidType, Deserialize)]
 pub struct CmcNotifyTopUpQuest {
@@ -113,7 +116,7 @@ pub enum CmcNotifyError {
     TransactionTooOld(IcpBlockHeight),
 }
 
-pub type CmcNotifyCreateCanisterResult = Result<Principal, CmcNotifyError>;
+//pub type CmcNotifyCreateCanisterResult = Result<Principal, CmcNotifyError>;
 
 pub type CmcNotifyTopUpResult = Result<Cycles, CmcNotifyError>;
 
@@ -226,6 +229,7 @@ pub mod management_canister {
         pub canister_id : Principal
     }
     
+    #[allow(non_camel_case_types)]
     #[derive(CandidType, Deserialize)]
     pub enum InstallCodeMode {
         install, 

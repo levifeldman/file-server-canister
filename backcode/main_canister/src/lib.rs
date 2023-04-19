@@ -19,8 +19,6 @@ use ic_cdk::{
             CandidType,
             Deserialize,
             encode_one,
-            decode_one,
-            Func
         },
     },
     api::{
@@ -33,7 +31,6 @@ use ic_cdk::{
 
 
 use serde_bytes::ByteBuf;
-use sha2::Digest;
 
 
 use file_server_lib::{
@@ -53,7 +50,8 @@ use file_server_lib::{
                 with,
                 with_mut
             }
-        }
+        },
+        sha256
     }
 };
 
@@ -192,6 +190,11 @@ pub fn controller_clear_files() {
 #[update]
 pub fn controller_upload_user_server_code(canister_code: CanisterCode) {
     caller_controller_check(&caller());
+    
+    if canister_code.hash != sha256(&canister_code.module) {
+        trap("canister code manual hash does not match given hash");
+    }
+    
     with_mut(&DATA, |data| {
         data.user_server_code = canister_code;
     });
@@ -314,7 +317,7 @@ async fn user_create_server_(user_id: Principal, mut user_create_server_mid_call
     // send the transfer, if fail delete ongoing call data and return final-error
     if user_create_server_mid_call_data.topup_cycles_ledger_transfer_block_height.is_none() {
         match topup_cycles_ledger_transfer(
-            user_create_server_mid_call_data.user_create_server_quest.with_icp,
+            user_create_server_mid_call_data.user_create_server_quest.with_icp - ICP_LEDGER_TRANSFER_DEFAULT_FEE,
             Some(principal_icp_subaccount(&user_id)),
             ic_cdk::api::id()
         ).await {

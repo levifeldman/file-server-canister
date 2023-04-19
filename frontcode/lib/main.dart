@@ -5,6 +5,7 @@ import 'package:js/js_util.dart';
 import 'dart:typed_data';
 
 import 'package:ic_tools/ic_tools.dart';
+import 'package:ic_tools/common.dart';
 import 'package:ic_tools/candid.dart' show c_forwards, c_backwards, Record;
 import 'package:ic_tools/candid.dart' as candid;
 import 'package:ic_tools_web/ic_tools_web.dart' as ic_tools_web;
@@ -65,7 +66,7 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
     
     late TabController tab_controller;
     
-    ChooseServer choose_server_selection = ChooseServer.temporary;
+    UserServer? user_server_selection;
     
     @override
     void initState() {
@@ -76,12 +77,14 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
         this.state.load_first_state().then((_null) { 
             setState((){
                 load_first_state_future_is_complete = true;
+                user_server_selection = state.user != null ? state.user!.user_servers.length >= 1 ? state.user!.user_servers.first : null : null;
             });
         }, onError: (e,s) {
             print(e);
             // alert dialog
             setState((){
                 load_first_state_future_is_complete = true;
+                user_server_selection = state.user != null ? state.user!.user_servers.length >= 1 ? state.user!.user_servers.first : null : null;
             });
             
         });
@@ -119,14 +122,15 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
                         print(f.bytes.length);
                     });
                     
-                    if (choose_server_selection == ChooseServer.temporary) {
-                        await state.user!.delete_user_temporary_server_files();
+                    if (user_server_selection != null) {
+                        await user_server_selection!.clear_files();
                         await upload_files(
                             files: file_uploads, 
-                            file_server_canister: CustomState.main_canister, 
+                            file_server_canister: user_server_selection!.canister, 
                             caller: state.user!.caller, 
                             legations: state.user!.legations
                         );    
+                        await user_server_selection!.load_filepaths();
                     }
                     
                     
@@ -204,49 +208,65 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
                     }
                 )
             ) : /*this.state.user != null ? */ Center(
-                child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: <Widget>[
-                        SelectableText('welcome user: ${state.user!.principal.text}'),
-                        Container(
-                            width: 400,
-                            child: DropdownButton(
-                                items: [
-                                    DropdownMenuItem(child: Text('Free Server'), value: ChooseServer.temporary),
-                                    if (state.user!.user_server == null) DropdownMenuItem(child: Text('Create A Server'), value: ChooseServer.create_user_server),
-                                    if (state.user!.user_server != null) DropdownMenuItem(child: Text('User Server'), value: ChooseServer.user_server),
-                                ],
-                                value: choose_server_selection,
-                                onChanged: (ChooseServer? selection) {
-                                    if (selection is ChooseServer) {
+                child: Container(
+                    padding: EdgeInsets.all(11),
+                    child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: <Widget>[
+                            SelectableText('welcome user: ${state.user!.principal.text}'),
+                            Container(
+                                width: 400,
+                                child: DropdownButton(
+                                    items: [
+                                        DropdownMenuItem(child: Text('Create A Server'), value: null),
+                                        for (UserServer user_server in state.user!.user_servers) 
+                                            DropdownMenuItem(child: Text('Server: ${user_server.canister.principal.text}'), value: user_server),
+                                    ],
+                                    value: user_server_selection,
+                                    onChanged: (UserServer? selection) {
+                                        //if (selection is UserServer) {
+                                            setState((){
+                                                user_server_selection = selection;
+                                            });
+                                        //}
+                                    },
+                                    elevation: 0,
+                                    isExpanded: true
+                                ),
+                            ),
+                            SizedBox(
+                                width: 1,
+                                height: 25
+                            ),
+                            
+                            
+                            /*
+                            Container(
+                                width: 70,
+                                height: 50,
+                                child: HtmlElementView(
+                                    viewType: 'input_directory_view_type',
+                                ),
+                            ),
+                            */
+                            user_server_selection == null ? UserCreateServerForm(
+                                state: state, 
+                                change_user_server_selection_and_set_state_function: 
+                                    (UserServer user_server) { 
                                         setState((){
-                                            choose_server_selection = selection;
+                                            user_server_selection = user_server;
                                         });
                                     }
-                                },
-                                elevation: 0,
-                                isExpanded: true
-                            ),
-                        ),
-                        
-                        /*
-                        Container(
-                            width: 70,
-                            height: 50,
-                            child: HtmlElementView(
-                                viewType: 'input_directory_view_type',
-                            ),
-                        ),
-                        */
-                        ElevatedButton(
-                            child: Text('Upload Folder'),
-                            onPressed: () {
-                                input_directory.click();
-                            }
-                        )      
-                    ],
-                ),
-            ),     
+                            ) : ElevatedButton(
+                                child: Text('Upload Folder'),
+                                onPressed: () {
+                                    input_directory.click();
+                                }
+                            )      
+                        ],
+                    ),
+                ),     
+            )
         ); 
     }
 }
@@ -294,19 +314,153 @@ class FileUpload {
 }
 
 
-Future<void> canister_upload_files(List<FileUpload> file_uploads) async {
+
+class UserCreateServerForm extends StatefulWidget {
+    CustomState state;
+    void Function(UserServer) change_user_server_selection_and_set_state_function;
+    UserCreateServerForm({super.key, required this.state, required this.change_user_server_selection_and_set_state_function});
     
-    // :LOOK AT THE go.dart-put_frontcode_files-FUNCTION.
-
-    //await Future.wait();
+    State createState() => UserCreateServerFormState();
+}
+class UserCreateServerFormState extends State<UserCreateServerForm> {
+    
+    GlobalKey<FormState> form_key = GlobalKey<FormState>();
+    
+    
+    late IcpTokens with_icp;
+    
+    
+    Widget build(BuildContext context) {
+        return Form(
+            key: form_key,
+            child: Column(
+                children: <Widget>[
+                    Text('User Icp Id:'),
+                    SelectableText(widget.state.user!.file_server_main_user_subaccount_icp_id),
+                    SizedBox(
+                        width: 1,
+                        height: 19,
+                    ),
+                    Text('Icp Balance: ${widget.state.user!.file_server_main_user_subaccount_icp_balance}'),
+                    ElevatedButton(
+                        child: Text('load icp balance', style: TextStyle(fontSize: 11)),
+                        onPressed: () async {
+                            setState((){
+                                widget.state.loading = true;
+                            });
+                            await widget.state.user!.load_file_server_main_user_subaccount_icp_balance();
+                            setState((){
+                                widget.state.loading = false;
+                            });
+                        }
+                    ),
+                    SizedBox(
+                        width: 1,
+                        height: 19,
+                    ),
+                    Text('Minimum Icp to create a server: ${CREATE_SERVER_MINIMUM_ICP}'),
+                    Container(
+                        constraints: BoxConstraints(maxWidth: 300),
+                        child: TextFormField(
+                            decoration: InputDecoration(
+                                labelText: 'Create server with icp: ',
+                                hintText: 'The icp converts into cycles which is the fuel that charges your server. More icp here means more cycles for your server.'
+                            ),
+                            onSaved: (String? value) { with_icp = IcpTokens.oftheDoubleString(value!); },
+                            validator: icp_validator
+                        )
+                    ),
+                    SizedBox(
+                        width: 1,
+                        height: 11,
+                    ),
+                    OutlinedButton(
+                        child: Text('Create Server', style: TextStyle(fontSize: 27)),
+                        onPressed: () async {
+                            if (form_key.currentState!.validate()==true) {
+                                    
+                                form_key.currentState!.save();
+                                
+                                setState((){
+                                    widget.state.loading = true;
+                                });
+                                
+                                late UserServer user_server;
+                                try {
+                                    user_server = await widget.state.user!.create_server(with_icp);
+                                } catch(e) {
+                                    await showDialog(
+                                        context: context,
+                                        builder: (BuildContext context) {
+                                            return AlertDialog(
+                                                title: Text('Create Server Error:'),
+                                                content: Text('${e}'),
+                                                actions: <Widget>[
+                                                    TextButton(
+                                                        onPressed: () => Navigator.pop(context),
+                                                        child: const Text('OK'),
+                                                    ),
+                                                ]
+                                            );
+                                        }   
+                                    );                        
+                                    setState((){
+                                        widget.state.loading = false;
+                                    });
+                                    return;
+                                }
+                                
+                                form_key.currentState!.reset();
+                                
+                                Future success_dialog = showDialog(
+                                    context: context,
+                                    builder: (BuildContext context) {
+                                        return AlertDialog(
+                                            title: Text('Create Server Success:'),
+                                            content: Text('server-id: ${user_server.canister.principal.text}'),
+                                            actions: <Widget>[
+                                                TextButton(
+                                                    onPressed: () => Navigator.pop(context),
+                                                    child: const Text('OK'),
+                                                ),
+                                            ]
+                                        );
+                                    }   
+                                );
+                                
+                                
+                                widget.state.user!.load_file_server_main_user_subaccount_icp_balance().then((_x){}, onError: (e) { print('error loading icp balance: $e'); });
+                                
+                                await success_dialog;
+                                
+                                widget.change_user_server_selection_and_set_state_function(user_server);
+                                
+                            }
+                        }
+                    ),
+                ]
+            )        
+        );
+    }
 
 }
 
 
 
-enum ChooseServer {
-    temporary,
-    create_user_server,
-    user_server,
-}
+final String? Function(String?) icp_validator = (String? v) {
+    if (v == null || v.trim() == '') {
+        return 'Must be a number of icp tokens';
+    }
+    
+    late IcpTokens icp;
+    try {
+        icp = IcpTokens.oftheDoubleString(v);
+    } catch(e) {
+        return 'invalid icp amount: $e';
+    }
+    
+    return null;
+    
+};
+
 
