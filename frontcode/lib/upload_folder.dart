@@ -6,13 +6,15 @@ import 'package:ic_tools/candid.dart';
 import 'package:collection/collection.dart';
 import 'package:archive/archive.dart';
 
-import './main.dart';
+
 
 Future<void> upload_files({
     required List<FileUpload> files,
     required Canister file_server_canister,
     required Caller caller,
-    required List<Legation> legations
+    required List<Legation> legations,
+    required String upload_file_method_name,
+    required String upload_file_chunk_method_name,
 }) async {
 
     //List<Future> upload_files_futures = [];
@@ -30,7 +32,7 @@ Future<void> upload_files({
 
             List<CandidType> cs = c_backwards(await file_server_canister.call(
                 calltype: CallType.call,
-                method_name: 'user_upload_file',
+                method_name: upload_file_method_name,
                 caller: caller,
                 legations: legations,
                 put_bytes: c_forwards([
@@ -55,7 +57,7 @@ Future<void> upload_files({
                     await Future(()async{
                         List<CandidType> cschunk = c_backwards(await file_server_canister.call(
                             calltype: CallType.call,
-                            method_name: 'user_upload_file_chunks',
+                            method_name: upload_file_chunk_method_name,
                             caller: caller,
                             legations: legations,
                             put_bytes: c_forwards([
@@ -79,4 +81,23 @@ Future<void> upload_files({
 }
 
 
+
+
+class FileUpload {
+    final String name;
+    final String path;
+    final int size;
+    final String content_type; // mime-type
+    final Uint8List bytes;
+    FileUpload({
+        required this.name,
+        required this.path,
+        required this.size,
+        required this.content_type, // mime-type
+        required this.bytes,
+    }) {
+        if (size != bytes.length) { throw Exception('file: ${name} bytes length != size. bytes_length: ${bytes.length}, size: $size'); }
+    }
+        
+}
 

@@ -9,19 +9,42 @@ import 'package:ic_tools/candid.dart';
 import 'package:ic_tools/common.dart';
 import 'package:ic_tools_web/ic_tools_web.dart' as ic_tools_web;
 import 'package:ic_tools_web/ic_tools_web.dart' show NullMap;
+import 'package:tuple/tuple.dart';
+
+import './files_and_directories.dart';
+
 
 
 final IcpTokens CREATE_SERVER_MINIMUM_ICP = IcpTokens.oftheDoubleString('0.5');
 
+final Canister main_canister = Canister(Principal('z7kqr-4yaaa-aaaaj-qaa5q-cai'));
+
 class CustomState {
-    
-    static Canister main_canister = Canister(Principal('z7kqr-4yaaa-aaaaj-qaa5q-cai'));     
     
     User? user;
     
     bool loading = false;
 
     Future<void> load_first_state() async {
+        /*
+        String LOCAL = String.fromEnvironment('LOCAL'); 
+        if (LOCAL != 'true' && LOCAL != 'false') {
+            throw Exception('environment variable \'LOCAL\' must be set to \'true\' or \'false\'');
+        }
+        if (LOCAL == 'true') {
+            icbaseurl = Uri.parse('http://127.0.0.1:4943');
+            Map ic_status_map = await ic_status();
+            icrootkey = Uint8List.fromList(ic_status_map['root_key']!);   
+        }
+        try {
+            main_canister = Canister(Principal(String.fromEnvironment('MAIN_CANISTER'))); // z7kqr-4yaaa-aaaaj-qaa5q-cai        
+        } catch(e) {
+            throw Exception('MAIN_CANISTER environment variable must be a valid Principal\n${e}');
+        }
+        */
+        
+        // -----
+    
         if (this.user == null) {
             this.user = (await ic_tools_web.User.load_user_of_the_indexdb()).nullmap(User.of_an_ic_tools_web_user);
         }
@@ -47,7 +70,7 @@ class User extends ic_tools_web.User {
     
     User({required super.caller, required super.legations});
     
-    String get file_server_main_user_subaccount_icp_id => icp_id(CustomState.main_canister.principal, subaccount_bytes: principal_as_an_icpsubaccountbytes(this.principal));
+    String get file_server_main_user_subaccount_icp_id => icp_id(main_canister.principal, subaccount_bytes: principal_as_an_icpsubaccountbytes(this.principal));
     
     IcpTokens file_server_main_user_subaccount_icp_balance = IcpTokens(e8s: BigInt.from(0));
     
@@ -63,7 +86,7 @@ class User extends ic_tools_web.User {
 
     Future<void> load_user_servers() async {
         this.user_servers = (c_backwards(await call(
-            CustomState.main_canister,
+            main_canister,
             method_name: 'see_user_server_canister_ids',
             calltype: CallType.query,
             put_bytes: c_forwards([])
@@ -81,7 +104,7 @@ class User extends ic_tools_web.User {
         }
         Variant create_server_result = c_backwards(
             await call(
-                CustomState.main_canister,
+                main_canister,
                 calltype: CallType.call,
                 method_name: 'user_create_server',
                 put_bytes: c_forwards([
@@ -97,7 +120,7 @@ class User extends ic_tools_web.User {
     Future<UserServer> continue_create_server() async {
         Variant continue_create_server_result = c_backwards(
             await call(
-                CustomState.main_canister,
+                main_canister,
                 calltype: CallType.call,
                 method_name: 'continue_user_create_server',
                 put_bytes: c_forwards([])
@@ -198,6 +221,8 @@ class UserServer {
     
     UserServer({required this.user, required this.canister});
     
+    String get link => 'https://${this.canister.principal}.icp0.io';
+    
     Future<void> load_filepaths() async {
         this.filepaths = (c_backwards(await user.call(
             this.canister,
@@ -215,6 +240,17 @@ class UserServer {
             put_bytes: c_forwards([])
         );
     }
+    
+    Directory get directory {
+        Tuple2<List<File>, List<Directory>> files_and_folders = 
+        files_and_folders_of_the_filepaths(this.filepaths);
+        return Directory(
+            path: '/',
+            files: files_and_folders.item1,
+            folders: files_and_folders.item2
+        );
+    }
+    
 
     
     @override
@@ -257,3 +293,8 @@ Map<String, Never Function(CandidType)> icp_transfer_error_match_map = {
         throw Exception('InsufficientFunds, balance: ${IcpTokens.oftheRecord((balance_r as Record)['balance'] as Record)}');
     }
 };
+
+
+
+
+
