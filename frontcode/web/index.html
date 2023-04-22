@@ -34,6 +34,28 @@
 
   <script src="ic_tools_webfiles/unpkg_bignumber.js"></script>
   <script src="ic_tools_webfiles/rust_wasm_bls12381/rust_wasm_bls12381.js"></script>    
+  <script>
+    
+    var logBackup = console.log;
+    var logMessages = [];
+    
+    function start_logMessages() {
+        console.log = function() {
+            logMessages.push.apply(logMessages, arguments);
+            logBackup.apply(console, arguments);
+        };
+    }
+    
+    function get_last_logMessage_toString() {
+        console.log = logBackup; 
+        console.log(typeof(logMessages[logMessages.length-1]));
+        return logMessages[logMessages.length-1].toString();    
+    }
+    
+    
+  </script>
+   
+   
    
   <script>
     // The value below is injected by flutter build, do not touch.
@@ -47,9 +69,9 @@
     window.addEventListener('load', function(ev) {
       // Download main.dart.js
       _flutter.loader.loadEntrypoint({
-        serviceWorker: {
-          serviceWorkerVersion: serviceWorkerVersion,
-        },
+        //serviceWorker: {
+        //  serviceWorkerVersion: serviceWorkerVersion,
+        //},
         onEntrypointLoaded: function(engineInitializer) {
           engineInitializer.initializeEngine().then(function(appRunner) {
             appRunner.runApp();
