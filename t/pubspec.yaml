@@ -1,5 +1,5 @@
-name: file_server_canister
-description: frontcode for the file-server-canister 
+name: t
+description: A new Flutter project.
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -34,19 +34,7 @@ dependencies:
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
-  # cupertino_icons: ^1.0.2
-  
-  ic_tools: #1.1.3
-    path: '/home/levi/Documents/code/ic_tools'
-  ic_tools_web: #1.0.0
-    path: '/home/levi/Documents/code/ic_tools_web'
-  loading_animation_widget: ^1.2.0+4
-  collection: 1.17.0   
-  archive: ^3.3.7 
-  url_launcher: ^6.1.10
-  tuple: ^2.0.1
-  
-  
+  cupertino_icons: ^1.0.2
 
 dev_dependencies:
   flutter_test:
@@ -86,10 +74,10 @@ flutter:
   # "family" key with the font family name, and a "fonts" key with a
   # list giving the asset and other descriptors for the font. For
   # example:
-  fonts:
-     - family: Roboto
-       fonts:
-         - asset: fonts/KFOmCnqEu92Fr1Me5WZLCzYlKw.ttf
+  # fonts:
+  #   - family: Schyler
+  #     fonts:
+  #       - asset: fonts/Schyler-Regular.ttf
   #       - asset: fonts/Schyler-Italic.ttf
   #         style: italic
   #   - family: Trajan Pro

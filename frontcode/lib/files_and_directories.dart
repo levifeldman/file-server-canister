@@ -86,7 +86,7 @@ Tuple2<List<File>, List<Directory>> files_and_folders_of_the_filepaths(List<Stri
     );
 }
 
-String print_directory(Directory d, int depth) {
+String print_directory(Directory d, [int depth = 0]) {
     String tabs = '';
     for (int i = 0; i < depth; i++) {
         tabs = tabs + '\t';

@@ -15,18 +15,23 @@ Future<void> upload_files({
     required List<Legation> legations,
     required String upload_file_method_name,
     required String upload_file_chunk_method_name,
+    void Function(int, String)? do_for_each_filename = null,
 }) async {
 
     //List<Future> upload_files_futures = [];
     
     GZipEncoder gzip = GZipEncoder();
     
-    for (FileUpload f in files) {
+    for (int i = 0; i<files.length; i++) {
+        
+        FileUpload f = files[i];
+        
+        if (do_for_each_filename != null) {
+            do_for_each_filename(i, f.name);
+        }
         
         //upload_files_futures.add(Future(()async{
-        
-        print(f.path);
-        await Future(()async{      
+        await Future(()async{
             List<int> file_bytes = gzip.encode(f.bytes)!;
             Iterable<List<int>> file_bytes_chunks = file_bytes.slices(1024*1024 + 1024*512);
 
@@ -51,7 +56,7 @@ Future<void> upload_files({
             print('${f.path}: $cs');
             
             if (file_bytes_chunks.length > 1) {
-                //List<Future> upload_chunks_futures = [];
+                List<Future> upload_chunks_futures = [];
                 for (int i = 1; i<file_bytes_chunks.length; i++) {
                     //upload_chunks_futures.add(Future(()async{
                     await Future(()async{
@@ -83,6 +88,9 @@ Future<void> upload_files({
 
 
 
+
+
+
 class FileUpload {
     final String name;
     final String path;
@@ -100,4 +108,5 @@ class FileUpload {
     }
         
 }
+
 

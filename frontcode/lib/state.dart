@@ -24,6 +24,7 @@ class CustomState {
     User? user;
     
     bool loading = false;
+    String loading_text = '';
 
     Future<void> load_first_state() async {
         /*

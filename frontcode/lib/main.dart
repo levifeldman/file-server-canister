@@ -5,6 +5,7 @@ import 'package:js/js_util.dart';
 import 'dart:typed_data';
 
 import 'package:ic_tools/ic_tools.dart';
+import 'package:ic_tools/tools.dart';
 import 'package:ic_tools/common.dart';
 import 'package:ic_tools/candid.dart' show c_forwards, c_backwards, Record;
 import 'package:ic_tools/candid.dart' as candid;
@@ -21,7 +22,7 @@ import './files_and_directories.dart';
 
 
 void main() {
-  runApp(const MyApp());
+    runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
@@ -32,6 +33,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'File Server Canister',
       theme: ThemeData(
+        fontFamily: 'Roboto',
         primarySwatch: Colors.red,
         appBarTheme: AppBarTheme(
             //color: blue, 
@@ -115,48 +117,41 @@ class _MyHomePageState extends State<MyHomePage> {//  with SingleTickerProviderS
                         file_uploads.add(
                             await file_upload_of_a_js_file(file)
                         );
-                        //String webkitRelativePath = getProperty(file, 'webkitRelativePath');
-                        //print(webkitRelativePath.substring(webkitRelativePath.indexOf('/')));
                     }
+                    /*
                     file_uploads.forEach((f){
                         print(f.path);
                         print(f.bytes.length);
                     });
-                    
-                    if (user_server_selection != null) {
-                        await user_server_selection!.clear_files();
-                        await upload_files(
-                            files: file_uploads, 
-                            file_server_canister: user_server_selection!.canister, 
-                            caller: state.user!.caller, 
-                            legations: state.user!.legations,
-                            upload_file_method_name: 'user_upload_file',
-                            upload_file_chunk_method_name: 'user_upload_file_chunk'
-                        );    
-                        await user_server_selection!.load_filepaths();
-                    }
+                    */
+                    int file_uploads_len = file_uploads.length;
                     
                     
+                    await user_server_selection!.clear_files();
+                    await upload_files(
+                        files: file_uploads,
+                        file_server_canister: user_server_selection!.canister,
+                        caller: state.user!.caller,
+                        legations: state.user!.legations,
+                        upload_file_method_name: 'user_upload_file',
+                        upload_file_chunk_method_name: 'user_upload_file_chunk',
+                        do_for_each_filename: (int i, String filename) {
+                            setState((){
+                                state.loading_text = 'Uploading file ${i}/${file_uploads_len} - ${filename}';
+                            });
+                        },
+                    );
+                    await user_server_selection!.load_filepaths();
+                    state.loading_text = '';
                     
                 } catch(e) {
                     print('Error syncing files: $e');
                 }
+                
                 setState((){
                     state.loading = false;
                 });
-                
-                    
-                    
-                // print(file_uploads.map((fu)=>[fu.path, fu.content_type]).toList());
-                    
-            
-                
-                /*
-                for (Object file in getProperty(getProperty(event, 'target'), 'files')) {
-                    String webkitRelativePath = getProperty(file, 'webkitRelativePath');
-                    print(webkitRelativePath.substring(webkitRelativePath.indexOf('/')));
-                }
-                */
+               
             },
             false
         );
@@ -182,9 +177,18 @@ class _MyHomePageState extends State<MyHomePage> {//  with SingleTickerProviderS
                 */
             ),
             body: this.load_first_state_future_is_complete == false || this.state.loading ? Center(
-                child: LoadingAnimationWidget.threeArchedCircle( // fade this in and out
-                    color: Colors.black,
-                    size: 100,
+                child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                        Container(
+                            margin: EdgeInsets.all(13),
+                            child: Text(state.loading_text),
+                        ),
+                        LoadingAnimationWidget.threeArchedCircle( // fade this in and out
+                            color: Colors.black,
+                            size: 90,
+                        ),
+                    ]
                 ),
             ) : this.state.user == null ? Center(
                 child: OutlinedButton(
@@ -214,89 +218,108 @@ class _MyHomePageState extends State<MyHomePage> {//  with SingleTickerProviderS
                 )
             ) : /*this.state.user != null ? */ Center(
                 child: Container(
+                    width: double.infinity,
                     padding: EdgeInsets.all(11),
-                    child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: <Widget>[
-                            SelectableText('welcome user: ${state.user!.principal.text}'),
-                            Container(
-                                width: 400,
-                                child: DropdownButton(
-                                    items: [
-                                        DropdownMenuItem(child: Text('Create A Server'), value: null),
-                                        for (UserServer user_server in state.user!.user_servers) 
-                                            DropdownMenuItem(child: Text('Server: ${user_server.canister.principal.text}'), value: user_server),
-                                    ],
-                                    value: user_server_selection,
-                                    onChanged: (UserServer? selection) {
-                                        //if (selection is UserServer) {
-                                            setState((){
-                                                user_server_selection = selection;
-                                            });
-                                        //}
-                                    },
-                                    elevation: 0,
-                                    isExpanded: true
-                                ),
-                            ),
-                            SizedBox(
-                                width: 1,
-                                height: 25
-                            ),
-                            /*
-                            Container(
-                                width: 70,
-                                height: 50,
-                                child: HtmlElementView(
-                                    viewType: 'input_directory_view_type',
-                                ),
-                            ),
-                            */
-                            if (user_server_selection == null) UserCreateServerForm(
-                                state: state, 
-                                change_user_server_selection_and_set_state_function: 
-                                    (UserServer user_server) { 
-                                        setState((){
-                                            user_server_selection = user_server;
-                                        });
-                                    }
-                            ) 
-                            else ...[
-                                Text('SERVER-URL:'),
-                                Link(
-                                    target: LinkTarget.blank,
-                                    uri: Uri.parse(user_server_selection!.link),
-                                    builder: (context, followLink) {
-                                        return MouseRegion(
-                                            cursor: SystemMouseCursors.click,
-                                            child: GestureDetector(
-                                                onTap: followLink,
-                                                child: SelectableText(
-                                                    user_server_selection!.link,
-                                                    style: TextStyle(
-                                                        color: Colors.blue,
-                                                        decoration: TextDecoration.underline
+                    child: SingleChildScrollView(
+                        child: Container(
+                            margin: EdgeInsets.all(13),
+                            child: Column(
+                                mainAxisAlignment: MainAxisAlignment.start,
+                                children: <Widget>[
+                                    Container(
+                                        margin: EdgeInsets.all(17),
+                                        child: SelectableText('Welcome user: ${state.user!.principal.text.substring(0,3)}...${state.user!.principal.text.substring(state.user!.principal.text.length - 3)}'),
+                                    ),
+                                    Container(
+                                        width: 400,
+                                        child: DropdownButton(
+                                            items: [
+                                                DropdownMenuItem(child: Text('Create A Server'), value: null),
+                                                for (UserServer user_server in state.user!.user_servers) 
+                                                    DropdownMenuItem(child: Text('Server: ${user_server.canister.principal.text}'), value: user_server),
+                                            ],
+                                            value: user_server_selection,
+                                            onChanged: (UserServer? selection) {
+                                                //if (selection is UserServer) {
+                                                    setState((){
+                                                        user_server_selection = selection;
+                                                    });
+                                                //}
+                                            },
+                                            elevation: 0,
+                                            isExpanded: true
+                                        ),
+                                    ),
+                                    SizedBox(
+                                        width: 1,
+                                        height: 25
+                                    ),
+                                    /*
+                                    Container(
+                                        width: 70,
+                                        height: 50,
+                                        child: HtmlElementView(
+                                            viewType: 'input_directory_view_type',
+                                        ),
+                                    ),
+                                    */
+                                    if (user_server_selection == null) UserCreateServerForm(
+                                        state: state, 
+                                        change_user_server_selection_and_set_state_function: 
+                                            (UserServer user_server) { 
+                                                setState((){
+                                                    user_server_selection = user_server;
+                                                });
+                                            },
+                                        set_state: setState,
+                                    ) 
+                                    else ...[
+                                        Container(
+                                            margin: EdgeInsets.all(16),
+                                            child: Text('SERVER-URL:'),
+                                        ),
+                                        Link(
+                                            target: LinkTarget.blank,
+                                            uri: Uri.parse(user_server_selection!.link),
+                                            builder: (context, followLink) {
+                                                return MouseRegion(
+                                                    cursor: SystemMouseCursors.click,
+                                                    child: GestureDetector(
+                                                        onTap: followLink,
+                                                        child: Text(
+                                                            user_server_selection!.link,
+                                                            style: TextStyle(
+                                                                fontSize: 14,
+                                                                color: Colors.blue,
+                                                                decoration: TextDecoration.underline
+                                                            )
+                                                        )
                                                     )
-                                                )
+                                                );
+                                            }
+                                        ),
+                                        SizedBox(
+                                            height: 25
+                                        ),
+                                        Container(
+                                            width: 200,
+                                            height: 40,
+                                            child: OutlinedButton(
+                                                child: Text('Upload Folder', style: TextStyle(fontSize: 21)),
+                                                onPressed: () {
+                                                    input_directory.click();
+                                                }
                                             )
-                                        );
-                                    }
-                                ),
-                                OutlinedButton(
-                                    child: Text('Upload Folder', style: TextStyle(fontSize: 27)),
-                                    onPressed: () {
-                                        input_directory.click();
-                                    }
-                                ), 
-                                SizedBox(
-                                    height: 25
-                                ),
-                                Text('Browse Files:'),
-                                Container(
-                                    child: ServerBrowser(server: user_server_selection!) 
-                                )
-                            ],
-                        ],
+                                        ),
+                                        SizedBox(
+                                            height: 25
+                                        ),
+                                        Text('Browse Files:', style: TextStyle(fontSize: 25)),
+                                        ServerBrowser(server: user_server_selection!) 
+                                    ],
+                                ],
+                            )
+                        )
                     ),
                 ),     
             )
@@ -315,18 +338,6 @@ class ItemUrlPolicy implements html.UriPolicy {
 
 
 
-Future<FileUpload> file_upload_of_a_js_file(Object file) async {        
-    String name = getProperty(file, 'name');
-    String webkitRelativePath = getProperty(file, 'webkitRelativePath');
-    int index_of_first_path_separator = webkitRelativePath.indexOf('/');
-    return FileUpload(
-        name: name,
-        path: name == 'index.html' ? '/' : webkitRelativePath.substring(index_of_first_path_separator), //index_of_first_path_separator >= 0 ? webkitRelativePath.substring(index_of_first_path_separator) : webkitRelativePath,
-        size: getProperty(file, 'size'),
-        content_type: getProperty(file, 'type'),
-        bytes: (await promiseToFuture(callMethod(file, 'arrayBuffer', []))).asUint8List()
-    );
-}
 
 
 
@@ -334,7 +345,8 @@ Future<FileUpload> file_upload_of_a_js_file(Object file) async {
 class UserCreateServerForm extends StatefulWidget {
     CustomState state;
     void Function(UserServer) change_user_server_selection_and_set_state_function;
-    UserCreateServerForm({super.key, required this.state, required this.change_user_server_selection_and_set_state_function});
+    void Function(void Function()) set_state;
+    UserCreateServerForm({super.key, required this.state, required this.change_user_server_selection_and_set_state_function, required this.set_state});
     
     State createState() => UserCreateServerFormState();
 }
@@ -359,13 +371,13 @@ class UserCreateServerFormState extends State<UserCreateServerForm> {
                     ),
                     Text('Icp Balance: ${widget.state.user!.file_server_main_user_subaccount_icp_balance}'),
                     OutlinedButton(
-                        child: Text('load icp balance', style: TextStyle(fontSize: 11)),
+                        child: Icon(Icons.refresh_rounded),
                         onPressed: () async {
-                            setState((){
+                            widget.set_state((){
                                 widget.state.loading = true;
                             });
                             await widget.state.user!.load_file_server_main_user_subaccount_icp_balance();
-                            setState((){
+                            widget.set_state((){
                                 widget.state.loading = false;
                             });
                         }
@@ -397,7 +409,7 @@ class UserCreateServerFormState extends State<UserCreateServerForm> {
                                     
                                 form_key.currentState!.save();
                                 
-                                setState((){
+                                widget.set_state((){
                                     widget.state.loading = true;
                                 });
                                 
@@ -420,7 +432,7 @@ class UserCreateServerFormState extends State<UserCreateServerForm> {
                                             );
                                         }   
                                     );                        
-                                    setState((){
+                                    widget.set_state((){
                                         widget.state.loading = false;
                                     });
                                     return;
@@ -451,6 +463,7 @@ class UserCreateServerFormState extends State<UserCreateServerForm> {
                                 
                                 widget.change_user_server_selection_and_set_state_function(user_server);
                                 
+                                widget.set_state((){});
                             }
                         }
                     ),
@@ -493,57 +506,71 @@ class ServerBrowserState extends State<ServerBrowser> {
         super.initState();
         
         directory = this.widget.server.directory;
+        //print(print_directory(directory));
+        //print(directory.folders.length);
     }
     
     Widget build(BuildContext context) {
         return Container(
             child: Column(
                 children: [
-                    Text(directory.path),
-                    ListView(
-                        padding: EdgeInsets.all(4),
-                        children: [
-                            if (parents.length >= 1) ListTile(
-                                leading: Icon(Icons.folder),
-                                title: Text('..'),
-                                onTap: () {
-                                    setState((){
-                                        directory = parents.removeLast();
-                                    });
-                                }
-                            ),
-                            for (Directory d in directory.folders) 
-                                MouseRegion(
-                                    cursor: SystemMouseCursors.click,
-                                    child: ListTile(
-                                        leading: Icon(Icons.folder),
-                                        title: SelectableText(d.path.substring(1)),
-                                        onTap: () {
-                                            setState((){
-                                                parents.add(directory);
-                                                directory = d;
-                                            });
-                                        }
-                                    )
-                                ),
-                            for (File f in directory.files) 
-                                Link(
-                                    target: LinkTarget.blank,
-                                    uri: Uri.parse(widget.server.link + parents.map<String>((d)=>d.path).join() + f.path),
-                                    builder: (context, followLink) {
-                                        return MouseRegion(
-                                            cursor: SystemMouseCursors.click,
-                                            child: ListTile(
-                                                leading: Icon(Icons.file_open),
-                                                title: SelectableText(
-                                                    parents.length == 0 && f.path == '/' ? 'index.html' : f.path.substring(1),
-                                                ),
-                                                onTap: followLink,
-                                            )
-                                        );
+                    Container(
+                        margin: EdgeInsets.all(13),
+                        child: Text(parents.map<String>((d)=>d.path).join().replaceFirst('/', '') + directory.path, style: TextStyle(fontSize: 20)),
+                    ),
+                    Container(
+                        constraints: BoxConstraints(
+                            maxWidth: 500,
+                        ),
+                        height: 500,
+                        decoration: BoxDecoration(
+                            border: Border.all(color: Colors.blueAccent)
+                        ),
+                        child: ListView(
+                            padding: EdgeInsets.all(4),
+                            children: [
+                                if (parents.length >= 1) ListTile(
+                                    leading: Icon(Icons.folder),
+                                    title: Text('..'),
+                                    onTap: () {
+                                        setState((){
+                                            directory = parents.removeLast();
+                                        });
                                     }
                                 ),
-                        ]
+                                for (Directory d in directory.folders) 
+                                    MouseRegion(
+                                        cursor: SystemMouseCursors.click,
+                                        child: ListTile(
+                                            leading: Icon(Icons.folder),
+                                            title: Text(d.path.substring(1)),
+                                            onTap: () {
+                                                setState((){
+                                                    parents.add(directory);
+                                                    directory = d;
+                                                });
+                                            }
+                                        )
+                                    ),
+                                for (File f in directory.files) 
+                                    Link(
+                                        target: LinkTarget.blank,
+                                        uri: Uri.parse(widget.server.link + parents.map<String>((d)=>d.path).join().replaceFirst('/', '') + (directory.path == '/' ? '' : directory.path) + f.path),
+                                        builder: (context, followLink) {
+                                            return MouseRegion(
+                                                cursor: SystemMouseCursors.click,
+                                                child: ListTile(
+                                                    leading: Icon(Icons.file_open),
+                                                    title: Text(
+                                                        parents.length == 0 && f.path == '/' ? 'index.html' : f.path.substring(1),
+                                                    ),
+                                                    onTap: followLink,
+                                                )
+                                            );
+                                        }
+                                    )
+                            ]
+                        )
                     ),
                 ]
             )       
@@ -551,6 +578,20 @@ class ServerBrowserState extends State<ServerBrowser> {
     }
 }
 
+
+
+Future<FileUpload> file_upload_of_a_js_file(Object file) async {        
+    String name = getProperty(file, 'name');
+    String webkitRelativePath = getProperty(file, 'webkitRelativePath');
+    int index_of_first_path_separator = webkitRelativePath.indexOf('/');
+    return FileUpload(
+        name: name,
+        path: name == 'index.html' ? '/' : webkitRelativePath.substring(index_of_first_path_separator), //index_of_first_path_separator >= 0 ? webkitRelativePath.substring(index_of_first_path_separator) : webkitRelativePath,
+        size: getProperty(file, 'size'),
+        content_type: getProperty(file, 'type'),
+        bytes: (await promiseToFuture(callMethod(file, 'arrayBuffer', []))).asUint8List()
+    );
+}
 
 
 
