@@ -16,7 +16,7 @@ import 'package:url_launcher/link.dart';
 import './state.dart';
 import './upload_folder.dart';
 import './files_and_directories.dart';
-
+import './palette.dart';
 
 
 
@@ -34,13 +34,13 @@ class MyApp extends StatelessWidget {
       title: 'File Server Canister',
       theme: ThemeData(
         fontFamily: 'Roboto',
-        primarySwatch: Colors.red,
+        primarySwatch: Palette.kToDark,
         appBarTheme: AppBarTheme(
             //color: blue, 
-            backgroundColor: Colors.red, 
+            //backgroundColor: Colors.red.shade900, 
             //foregroundColor: double?, 
             elevation: 0.0,  
-            shadowColor: null,  
+            //shadowColor: null,  
         )
       ),
       home: const MyHomePage(),
@@ -68,6 +68,8 @@ class _MyHomePageState extends State<MyHomePage> {//  with SingleTickerProviderS
     bool load_first_state_future_is_complete = false;
     
     //late TabController tab_controller;
+    
+    late BuildContext latest_context;
     
     UserServer? user_server_selection;
     
@@ -166,6 +168,7 @@ class _MyHomePageState extends State<MyHomePage> {//  with SingleTickerProviderS
 
     @override
     Widget build(BuildContext context) {
+        latest_context = context;
         return Scaffold(
             appBar: AppBar(
                 title: Text('File Server Canister'),
@@ -233,10 +236,12 @@ class _MyHomePageState extends State<MyHomePage> {//  with SingleTickerProviderS
                                     Container(
                                         width: 400,
                                         child: DropdownButton(
+                                            iconSize: 43.0,
                                             items: [
                                                 DropdownMenuItem(child: Text('Create A Server'), value: null),
+                                                DropdownMenuItem(child: Text('Sample Server: ${sample_server.canister.principal.text}'), value: sample_server),
                                                 for (UserServer user_server in state.user!.user_servers) 
-                                                    DropdownMenuItem(child: Text('Server: ${user_server.canister.principal.text}'), value: user_server),
+                                                    DropdownMenuItem(child: Text('User Server: ${user_server.canister.principal.text}'), value: user_server),
                                             ],
                                             value: user_server_selection,
                                             onChanged: (UserServer? selection) {
@@ -265,13 +270,14 @@ class _MyHomePageState extends State<MyHomePage> {//  with SingleTickerProviderS
                                     */
                                     if (user_server_selection == null) UserCreateServerForm(
                                         state: state, 
-                                        change_user_server_selection_and_set_state_function: 
+                                        change_user_server_selection_function: 
                                             (UserServer user_server) { 
-                                                setState((){
-                                                    user_server_selection = user_server;
-                                                });
+                                                user_server_selection = user_server;
                                             },
                                         set_state: setState,
+                                        get_main_page_context: () {
+                                            return this.latest_context;
+                                        }
                                     ) 
                                     else ...[
                                         Container(
@@ -305,9 +311,36 @@ class _MyHomePageState extends State<MyHomePage> {//  with SingleTickerProviderS
                                             width: 200,
                                             height: 40,
                                             child: OutlinedButton(
-                                                child: Text('Upload Folder', style: TextStyle(fontSize: 21)),
-                                                onPressed: () {
-                                                    input_directory.click();
+                                                child: Text('Sync Directory', style: TextStyle(fontSize: 21)),
+                                                onPressed: () async {
+                                                    if (user_server_selection is SampleServer) {
+                                                        await showDialog(
+                                                            context: context,
+                                                            builder: (BuildContext context) {
+                                                                return AlertDialog(
+                                                                    title: Text('Create A Server To Upload and Sync Files:'),
+                                                                    content: Text('You are viewing a sample server. To Upload and Sync files with a server, either create a new server or choose a user server if you already have one created.'),
+                                                                    actions: <Widget>[
+                                                                        TextButton(
+                                                                            onPressed: () => Navigator.pop(context),
+                                                                            child: const Text('Continue viewing the sample server'),
+                                                                        ),
+                                                                        TextButton(
+                                                                            onPressed: () {
+                                                                                Navigator.pop(context);
+                                                                                setState((){
+                                                                                    user_server_selection = null;
+                                                                                });
+                                                                            },
+                                                                            child: const Text('Create A Server'),
+                                                                        ),
+                                                                    ]
+                                                                );
+                                                            }   
+                                                        );  
+                                                    } else {
+                                                        input_directory.click();
+                                                    }
                                                 }
                                             )
                                         ),
@@ -315,7 +348,7 @@ class _MyHomePageState extends State<MyHomePage> {//  with SingleTickerProviderS
                                             height: 25
                                         ),
                                         Text('Browse Files:', style: TextStyle(fontSize: 25)),
-                                        ServerBrowser(server: user_server_selection!) 
+                                        ServerBrowser(key: ValueKey(user_server_selection!), server: user_server_selection!) 
                                     ],
                                 ],
                             )
@@ -344,9 +377,10 @@ class ItemUrlPolicy implements html.UriPolicy {
 
 class UserCreateServerForm extends StatefulWidget {
     CustomState state;
-    void Function(UserServer) change_user_server_selection_and_set_state_function;
+    void Function(UserServer) change_user_server_selection_function;
+    BuildContext Function() get_main_page_context;
     void Function(void Function()) set_state;
-    UserCreateServerForm({super.key, required this.state, required this.change_user_server_selection_and_set_state_function, required this.set_state});
+    UserCreateServerForm({super.key, required this.state, required this.get_main_page_context, required this.change_user_server_selection_function, required this.set_state});
     
     State createState() => UserCreateServerFormState();
 }
@@ -418,7 +452,7 @@ class UserCreateServerFormState extends State<UserCreateServerForm> {
                                     user_server = await widget.state.user!.create_server(with_icp);
                                 } catch(e) {
                                     await showDialog(
-                                        context: context,
+                                        context: widget.get_main_page_context(),
                                         builder: (BuildContext context) {
                                             return AlertDialog(
                                                 title: Text('Create Server Error:'),
@@ -438,10 +472,12 @@ class UserCreateServerFormState extends State<UserCreateServerForm> {
                                     return;
                                 }
                                 
-                                form_key.currentState!.reset();
+                                //form_key.currentState!.reset(); // currentState is null after the first setState loading = true bc the form goes away, as of now the loading is not overlaid on the page, it replaces the page.
                                 
-                                Future success_dialog = showDialog(
-                                    context: context,
+                                widget.state.user!.load_file_server_main_user_subaccount_icp_balance().then((_x){}, onError: (e) { print('error loading icp balance: $e'); });
+                                
+                                await showDialog(
+                                    context: widget.get_main_page_context(),
                                     builder: (BuildContext context) {
                                         return AlertDialog(
                                             title: Text('Create Server Success:'),
@@ -456,14 +492,11 @@ class UserCreateServerFormState extends State<UserCreateServerForm> {
                                     }   
                                 );
                                 
+                                widget.set_state((){
+                                    widget.change_user_server_selection_function(user_server);
+                                    widget.state.loading = false;
+                                });
                                 
-                                widget.state.user!.load_file_server_main_user_subaccount_icp_balance().then((_x){}, onError: (e) { print('error loading icp balance: $e'); });
-                                
-                                await success_dialog;
-                                
-                                widget.change_user_server_selection_and_set_state_function(user_server);
-                                
-                                widget.set_state((){});
                             }
                         }
                     ),

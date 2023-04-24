@@ -19,6 +19,22 @@ final IcpTokens CREATE_SERVER_MINIMUM_ICP = IcpTokens.oftheDoubleString('0.5');
 
 final Canister main_canister = Canister(Principal('z7kqr-4yaaa-aaaaj-qaa5q-cai'));
 
+
+
+final String sample_server_canister_id = 'tbrgj-nqaaa-aaaaj-qaz4a-cai';
+class SampleServer extends UserServer {
+    SampleServer({required super.user}) : super(canister: Canister(Principal(sample_server_canister_id)));
+
+    @override
+    bool operator ==(/*covariant SampleServer*/ other) => other is SampleServer && other.canister == this.canister;
+
+    @override
+    int get hashCode => this.canister.hashCode;    
+}
+late SampleServer sample_server;
+
+
+
 class CustomState {
     
     User? user;
@@ -46,12 +62,15 @@ class CustomState {
         
         // -----
     
+        sample_server = SampleServer(user: User(caller: await ic_tools_web.SubtleCryptoECDSAP256Caller.new_keys(), legations: []));
+    
         if (this.user == null) {
             this.user = (await ic_tools_web.User.load_user_of_the_indexdb()).nullmap(User.of_an_ic_tools_web_user);
         }
         if (this.user != null) {
             await Future.wait([
                 this.user!.load_file_server_main_user_subaccount_icp_balance(),
+                sample_server.load_filepaths(),
                 Future(()async{
                     await this.user!.load_user_servers();
                     await Future.wait(this.user!.user_servers.map<Future<void>>((user_server)=>user_server.load_filepaths()));
@@ -255,7 +274,7 @@ class UserServer {
 
     
     @override
-    bool operator ==(/*covariant UserServer*/ other) => other is UserServer && other.canister == this.canister;
+    bool operator ==(/*covariant UserServer*/ other) => other is UserServer && other is! SampleServer && other.canister == this.canister;
 
     @override
     int get hashCode => this.canister.hashCode;    
