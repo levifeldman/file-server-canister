@@ -14,35 +14,37 @@ import 'package:archive/archive.dart';
 
 
 
-import '../../frontcode/lib/upload_folder.dart' show FileUpload;
+//import '../../frontcode/lib/upload_folder.dart' show FileUpload;
 
 
 Future<void> main(List<String> arguments) async {
     
-    Canister file_server_main = Canister(Principal('z7kqr-4yaaa-aaaaj-qaa5q-cai'));
+    Canister file_server_main = Canister(Principal.text('z7kqr-4yaaa-aaaaj-qaa5q-cai'));
     
     String controller_json_path = 'controller.json';
     
     File controller_json_file = File(controller_json_path);
     
-    late CallerEd25519 controller;
+    late Ed25519Keys keys;
     
     if (await controller_json_file.exists()) {
         Map controller_json = jsonDecode(utf8.decode(await controller_json_file.readAsBytes()));
-        controller = CallerEd25519(
+        keys = Ed25519Keys(
             public_key: Uint8List.fromList(controller_json['controller']!['public_key']!.cast<int>()),
             private_key: Uint8List.fromList(controller_json['controller']!['private_key']!.cast<int>())
         );
     } else {
-        controller = CallerEd25519.new_keys();
+        keys = Ed25519Keys.new_keys();
         await controller_json_file.writeAsString(jsonEncode({
             'controller': {
-                'public_key': controller.public_key.toList(),
-                'private_key': controller.private_key.toList()
+                'public_key': keys.public_key.toList(),
+                'private_key': keys.private_key.toList()
             }
         }));
-        print('creating new ed25519 keys: ${controller.principal.text}\nsaving keys in ${controller_json_path}');
+        print('creating new ed25519 keys\nsaving keys in ${controller_json_path}');
     }
+    
+    Caller controller = Caller(keys: keys);
     
     
     print('using controller: ${controller.principal.text}'); 
@@ -51,16 +53,17 @@ Future<void> main(List<String> arguments) async {
     if (arguments[0] == 'check_canister_status') {
         print(await check_canister_status(controller, file_server_main.principal));
     }
+    
     else if (arguments[0] == 'install_code') {
         String mode = arguments[1];
         await put_code_on_the_canister(
             controller,
             file_server_main.principal,
             File('../backcode/target/wasm32-unknown-unknown/release/main_canister.wasm').readAsBytesSync(),
-            mode,
+            CanisterInstallMode.values.asNameMap()[mode]!,
             c_forwards([
-                Record.oftheMap({
-                    'controllers': Vector.oftheList<Principal>([
+                Record.of_the_map({
+                    'controllers': Vector.of_the_list<Principal>([
                         controller.principal
                     ])
                 })
@@ -72,7 +75,7 @@ Future<void> main(List<String> arguments) async {
             method_name: 'uninstall_code',
             caller: controller,
             put_bytes: c_forwards([
-                Record.oftheMap({
+                Record.of_the_map({
                     'canister_id': file_server_main.principal
                 })
             ])
@@ -84,7 +87,7 @@ Future<void> main(List<String> arguments) async {
             method_name: 'controller_upload_user_server_code',
             caller: controller,
             put_bytes: c_forwards([
-                Record.oftheMap({
+                Record.of_the_map({
                     'module': Blob(user_canister_module),
                     'hash': Blob(sha256.convert(user_canister_module).bytes)
                 })
@@ -121,7 +124,6 @@ Future<void> main(List<String> arguments) async {
             files: file_uploads, 
             file_server_canister: file_server_main, 
             caller: controller, 
-            legations: [],
             upload_file_method_name: 'controller_upload_file',
             upload_file_chunk_method_name: 'controller_upload_file_chunk',
         );
@@ -147,7 +149,6 @@ Future<void> upload_files({
     required List<FileUpload> files,
     required Canister file_server_canister,
     required Caller caller,
-    required List<Legation> legations,
     required String upload_file_method_name,
     required String upload_file_chunk_method_name,
     void Function(int, String)? do_for_each_filename = null,
@@ -174,16 +175,15 @@ Future<void> upload_files({
                 calltype: CallType.call,
                 method_name: upload_file_method_name,
                 caller: caller,
-                legations: legations,
                 put_bytes: c_forwards([
-                    Record.oftheMap({
+                    Record.of_the_map({
                         'path': Text(f.path),
                         'first_chunk': Blob(file_bytes_chunks.first),
                         'chunks': Nat32(file_bytes_chunks.length),
-                        'headers': Vector.oftheList<Record>([
-                            Record.oftheMap({0: Text('Content-Type'), 1: Text(f.content_type)}),
-                            Record.oftheMap({0: Text('Content-Encoding'), 1: Text('gzip')}),                            
-                            Record.oftheMap({0: Text("Access-Control-Allow-Origin"), 1: Text("*")}),
+                        'headers': Vector.of_the_list<Record>([
+                            Record.of_the_map({0: Text('Content-Type'), 1: Text(f.content_type)}),
+                            Record.of_the_map({0: Text('Content-Encoding'), 1: Text('gzip')}),                            
+                            Record.of_the_map({0: Text("Access-Control-Allow-Origin"), 1: Text("*")}),
                         ]),
                     }),
                 ])
@@ -199,9 +199,8 @@ Future<void> upload_files({
                             calltype: CallType.call,
                             method_name: upload_file_chunk_method_name,
                             caller: caller,
-                            legations: legations,
                             put_bytes: c_forwards([
-                                Record.oftheMap({
+                                Record.of_the_map({
                                     'path': Text(f.path),
                                     'chunk_i': Nat32(i),
                                     'chunk': Blob(file_bytes_chunks.elementAt(i)), 
@@ -218,6 +217,26 @@ Future<void> upload_files({
         }));
     }
     await Future.wait(upload_files_futures);
+}
+
+
+
+class FileUpload {
+    final String name;
+    final String path;
+    final int size;
+    final String content_type; // mime-type
+    final Uint8List bytes;
+    FileUpload({
+        required this.name,
+        required this.path,
+        required this.size,
+        required this.content_type, // mime-type
+        required this.bytes,
+    }) {
+        if (size != bytes.length) { throw Exception('file: ${name} bytes length != size. bytes_length: ${bytes.length}, size: $size'); }
+    }
+        
 }
 
 

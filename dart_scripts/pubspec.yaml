@@ -7,7 +7,7 @@ environment:
 
 dependencies:
 #   path: ^1.8.0
-    ic_tools: 1.1.4
+    ic_tools: 2.0.1
 
 dev_dependencies:
   lints: ^2.0.0

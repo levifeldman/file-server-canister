@@ -3,5 +3,7 @@
 .dart_tool/
 
 controller.json
+o_controller.json
+
 
 pubspec.lock
